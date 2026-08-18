@@ -127,24 +127,30 @@ model persona {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model ref_cama_clinica {
-  id                 Int           @id @default(autoincrement())
-  solicitud_id       Int           @unique(map: "solicitud_id")
-  tipo_paciente_id   Int           @db.UnsignedTinyInt
-  peso               Decimal?      @db.Decimal(6, 2)
-  unidad_peso        String?       @db.VarChar(15)
-  seguro_medico      String?       @db.VarChar(100)
-  antecedentes       String?       @db.Text
-  diagnostico        String        @db.Text
-  tiempo_evolucion   String?       @db.VarChar(100)
-  tiempo_internacion String?       @db.VarChar(100)
-  escala_dolor       Int?          @db.TinyInt
-  laboratorio        String?       @db.Text
-  imagenes           String?       @db.Text
-  otros_datos        String?       @db.Text
-  solicitud          solicitud     @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_rcc_solicitud")
-  tipo_paciente      tipo_paciente @relation(fields: [tipo_paciente_id], references: [id], onUpdate: Restrict, map: "fk_rcc_tipo_paciente")
+  id                                                      Int           @id @default(autoincrement())
+  solicitud_id                                            Int           @unique(map: "solicitud_id")
+  hospital_origen_id                                      Int?
+  hospital_destino_id                                     Int?
+  tipo_paciente_id                                        Int           @db.UnsignedTinyInt
+  peso                                                    Decimal?      @db.Decimal(6, 2)
+  unidad_peso                                             String?       @db.VarChar(15)
+  seguro_medico                                           String?       @db.VarChar(100)
+  antecedentes                                            String?       @db.Text
+  diagnostico                                             String        @db.Text
+  tiempo_evolucion                                        String?       @db.VarChar(100)
+  tiempo_internacion                                      String?       @db.VarChar(100)
+  escala_dolor                                            Int?          @db.TinyInt
+  laboratorio                                             String?       @db.Text
+  imagenes                                                String?       @db.Text
+  otros_datos                                             String?       @db.Text
+  hospital_ref_cama_clinica_hospital_destino_idTohospital hospital?     @relation("ref_cama_clinica_hospital_destino_idTohospital", fields: [hospital_destino_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_rcc_destino")
+  hospital_ref_cama_clinica_hospital_origen_idTohospital  hospital?     @relation("ref_cama_clinica_hospital_origen_idTohospital", fields: [hospital_origen_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_rcc_origen")
+  solicitud                                               solicitud     @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_rcc_solicitud")
+  tipo_paciente                                           tipo_paciente @relation(fields: [tipo_paciente_id], references: [id], onUpdate: Restrict, map: "fk_rcc_tipo_paciente")
 
   @@index([tipo_paciente_id], map: "fk_rcc_tipo_paciente")
+  @@index([hospital_destino_id], map: "fk_rcc_destino")
+  @@index([hospital_origen_id], map: "fk_rcc_origen")
 }
 
 model ref_cama_obstetrica {
@@ -221,20 +227,22 @@ model rol_guardia_modificacion {
 }
 
 model rol_guardia_movil {
-  id              Int           @id @default(autoincrement())
+  id              Int             @id @default(autoincrement())
   rol_guardia_id  Int
   vehiculo_id     Int
-  base_id         Int           @db.UnsignedTinyInt
-  tipo_soporte_id Int           @db.UnsignedTinyInt
-  estado          String        @default("DISPONIBLE") @db.VarChar(20)
-  activo          Boolean       @default(true)
-  created_at      DateTime      @default(now()) @db.DateTime(0)
-  updated_at      DateTime      @default(now()) @db.DateTime(0)
+  base_id         Int             @db.UnsignedTinyInt
+  tipo_soporte_id Int             @db.UnsignedTinyInt
+  estado          String          @default("DISPONIBLE") @db.VarChar(20)
+  activo          Boolean         @default(true)
+  created_at      DateTime        @default(now()) @db.DateTime(0)
+  updated_at      DateTime        @default(now()) @db.DateTime(0)
+  cobertura       cobertura[]
   despacho        despacho[]
-  base            base          @relation(fields: [base_id], references: [id], onUpdate: Restrict, map: "fk_rgm_base")
-  rol_guardia     rol_guardia   @relation(fields: [rol_guardia_id], references: [id], onUpdate: Restrict, map: "fk_rgm_rol_guardia")
-  tipo_soporte    tipo_soporte  @relation(fields: [tipo_soporte_id], references: [id], onUpdate: Restrict, map: "fk_rgm_tipo_soporte")
-  movil           movil         @relation(fields: [vehiculo_id], references: [id], onUpdate: Restrict, map: "fk_rgm_vehiculo")
+  orden_trabajo   orden_trabajo[]
+  base            base            @relation(fields: [base_id], references: [id], onUpdate: Restrict, map: "fk_rgm_base")
+  rol_guardia     rol_guardia     @relation(fields: [rol_guardia_id], references: [id], onUpdate: Restrict, map: "fk_rgm_rol_guardia")
+  tipo_soporte    tipo_soporte    @relation(fields: [tipo_soporte_id], references: [id], onUpdate: Restrict, map: "fk_rgm_tipo_soporte")
+  movil           movil           @relation(fields: [vehiculo_id], references: [id], onUpdate: Restrict, map: "fk_rgm_vehiculo")
   tripulacion     tripulacion[]
 
   @@index([base_id], map: "fk_rgm_base")
@@ -290,10 +298,15 @@ model solicitud {
   observacion             String?                   @db.Text
   created_at              DateTime                  @default(now()) @db.DateTime(0)
   updated_at              DateTime                  @default(now()) @db.DateTime(0)
+  auditoria               auditoria[]
+  chatbot_confirmacion    chatbot_confirmacion[]
+  cobertura               cobertura[]
   despacho                despacho[]
   historial_solicitud     historial_solicitud[]
   inotripicos             inotripicos[]
   notificacion            notificacion[]
+  orden_trabajo           orden_trabajo[]
+  prioridad_log           prioridad_log[]
   ref_cama_clinica        ref_cama_clinica?
   ref_cama_obstetrica     ref_cama_obstetrica?
   ref_cama_reiteracion    ref_cama_reiteracion[]
@@ -483,59 +496,72 @@ model tripulacion {
 }
 
 model usuario {
-  id                                Int                        @id @default(autoincrement())
-  persona_id                        Int                        @unique(map: "uk_persona")
-  rol_id                            Int                        @db.UnsignedTinyInt
-  password                          String                     @db.VarChar(255)
-  activo                            Boolean                    @default(true)
-  debe_cambiar_password             Boolean                    @default(true)
-  created_at                        DateTime                   @default(now()) @db.DateTime(0)
-  updated_at                        DateTime                   @default(now()) @db.DateTime(0)
-  despacho                          despacho[]
-  historial_solicitud               historial_solicitud[]
-  inotripicos                       inotripicos[]
-  ref_cama_reiteracion              ref_cama_reiteracion[]
-  rol_guardia                       rol_guardia[]
-  rol_guardia_modificacion          rol_guardia_modificacion[]
-  signos_vitales                    signos_vitales[]
-  solicitud                         solicitud[]
-  tripulacion                       tripulacion[]
-  horario_guardia                   horario_guardia[]
-  paramedico_habilitado_usuario     paramedico_habilitado[]    @relation("paramedico_usuario")
-  paramedico_habilitado_habilitador paramedico_habilitado[]    @relation("paramedico_habilitador")
-  conductor_habilitado_usuario      conductor_habilitado[]     @relation("conductor_usuario")
-  conductor_habilitado_habilitador  conductor_habilitado[]     @relation("conductor_habilitador")
-  persona                           persona                    @relation(fields: [persona_id], references: [id], onUpdate: Restrict, map: "fk_usuario_persona")
-  rol                               rol                        @relation(fields: [rol_id], references: [id], onUpdate: Restrict, map: "fk_usuario_rol")
-  estado_temporal          estado_temporal_personal[] @relation("etp_usuario")
-  estado_temporal_relacion estado_temporal_personal[] @relation("etp_relacionado")
-  estado_temporal_registro estado_temporal_personal[] @relation("etp_registrador")
-  orden_trabajo_conductor  orden_trabajo_transporte[] @relation("orden_conductor")
-  orden_trabajo_creador    orden_trabajo_transporte[] @relation("orden_creador")
+  id                                                        Int                        @id @default(autoincrement())
+  persona_id                                                Int                        @unique(map: "uk_persona")
+  rol_id                                                    Int                        @db.UnsignedTinyInt
+  password                                                  String                     @db.VarChar(255)
+  activo                                                    Boolean                    @default(true)
+  debe_cambiar_password                                     Boolean                    @default(true)
+  created_at                                                DateTime                   @default(now()) @db.DateTime(0)
+  updated_at                                                DateTime                   @default(now()) @db.DateTime(0)
+  auditoria                                                 auditoria[]
+  cobertura_cobertura_coordinador_idTousuario               cobertura[]                @relation("cobertura_coordinador_idTousuario")
+  cobertura_cobertura_despachante_idTousuario               cobertura[]                @relation("cobertura_despachante_idTousuario")
+  cobertura_asistencia                                      cobertura_asistencia[]
+  conductor_habilitado_usuario                              conductor_habilitado?      @relation("conductor_usuario")
+  conductor_habilitado_habilitador                          conductor_habilitado[]     @relation("conductor_habilitador")
+  despacho                                                  despacho[]
+  estado_temporal_registro                                  estado_temporal_personal[] @relation("etp_registrador")
+  estado_temporal_relacion                                  estado_temporal_personal[] @relation("etp_relacionado")
+  estado_temporal                                           estado_temporal_personal[] @relation("etp_usuario")
+  historial_solicitud                                       historial_solicitud[]
+  horario_guardia                                           horario_guardia[]
+  inotripicos                                               inotripicos[]
+  orden_trabajo_orden_trabajo_asistente_idTousuario         orden_trabajo[]            @relation("orden_trabajo_asistente_idTousuario")
+  orden_trabajo_orden_trabajo_coordinador_trans_idTousuario orden_trabajo[]            @relation("orden_trabajo_coordinador_trans_idTousuario")
+  orden_trabajo_conductor                                   orden_trabajo_transporte[] @relation("orden_conductor")
+  orden_trabajo_creador                                     orden_trabajo_transporte[] @relation("orden_creador")
+  paramedico_habilitado_usuario                             paramedico_habilitado?     @relation("paramedico_usuario")
+  paramedico_habilitado_habilitador                         paramedico_habilitado[]    @relation("paramedico_habilitador")
+  medico_habilitado_usuario     medico_habilitado[]  @relation("medico_usuario")
+  medico_habilitado_habilitador medico_habilitado[]  @relation("medico_habilitador")
+  arm_habilitado_usuario        arm_habilitado[]     @relation("arm_usuario")
+  arm_habilitado_habilitador    arm_habilitado[]     @relation("arm_habilitador")
+  turno_regulacion              turno_regulacion[]
+  prioridad_log                                             prioridad_log[]
+  push_token                                                push_token[]
+  ref_cama_reiteracion                                      ref_cama_reiteracion[]
+  rol_guardia                                               rol_guardia[]
+  rol_guardia_modificacion                                  rol_guardia_modificacion[]
+  signos_vitales                                            signos_vitales[]
+  solicitud                                                 solicitud[]
+  tripulacion                                               tripulacion[]
+  persona                                                   persona                    @relation(fields: [persona_id], references: [id], onUpdate: Restrict, map: "fk_usuario_persona")
+  rol                                                       rol                        @relation(fields: [rol_id], references: [id], onUpdate: Restrict, map: "fk_usuario_rol")
 
   @@index([rol_id], map: "fk_usuario_rol")
 }
 
 model movil {
-  id                        Int                 @id @default(autoincrement())
-  cod_movil                 String              @unique(map: "uk_cod_movil") @db.VarChar(20)
-  placa                     String?              @unique(map: "placa") @db.VarChar(20)
-  nro_orden                 String?             @db.VarChar(20)
-  rasp                      String?             @db.VarChar(20)
-  funcion                   String?             @db.VarChar(255)
-  consumo_l100km            Decimal?            @db.Decimal(5, 2)
-  nro_tarjeta_combustible   String?             @db.VarChar(30)
-  km_inicio                 Int?
-  ultimo_km                 Int?
-  tipo                      String              @db.VarChar(30)
-  marca                     String?             @db.VarChar(50)
-  modelo                    String?             @db.VarChar(50)
-  anio                      Int?                @db.Year
-  activo                    Boolean             @default(true)
-  created_at                DateTime            @default(now()) @db.DateTime(0)
-  updated_at                DateTime            @default(now()) @db.DateTime(0)
-  rol_guardia_movil         rol_guardia_movil[]
+  id                       Int                        @id @default(autoincrement())
+  cod_movil                String                     @unique(map: "uk_cod_movil") @db.VarChar(20)
+  tipo                     String                     @db.VarChar(30)
+  marca                    String?                    @db.VarChar(50)
+  modelo                   String?                    @db.VarChar(50)
+  anio                     Int?                       @db.Year
+  placa                    String?                    @unique(map: "placa") @db.VarChar(20)
+  nro_orden                String?                    @db.VarChar(20)
+  rasp                     String?                    @db.VarChar(20)
+  funcion                  String?                    @db.VarChar(255)
+  consumo_l100km           Decimal?                   @db.Decimal(5, 2)
+  nro_tarjeta_combustible  String?                    @db.VarChar(30)
+  km_inicio                Int?
+  ultimo_km                Int?
+  activo                   Boolean                    @default(true)
+  created_at               DateTime                   @default(now()) @db.DateTime(0)
+  updated_at               DateTime                   @default(now()) @db.DateTime(0)
   orden_trabajo_transporte orden_trabajo_transporte[]
+  rol_guardia_movil        rol_guardia_movil[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -579,8 +605,10 @@ model despacho {
   hora_despacho        DateTime          @default(now()) @db.DateTime(0)
   hora_en_escena       DateTime?         @db.DateTime(0)
   hora_fin             DateTime?         @db.DateTime(0)
+  condicion_cierre_id  Int?              @db.UnsignedTinyInt
   created_at           DateTime          @default(now()) @db.DateTime(0)
   updated_at           DateTime          @default(now()) @db.DateTime(0)
+  condicion_cierre     condicion_cierre? @relation(fields: [condicion_cierre_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_des_condicion_cierre")
   usuario              usuario           @relation(fields: [despachante_id], references: [id], onUpdate: Restrict, map: "fk_des_despachante")
   estado_despacho      estado_despacho   @relation(fields: [estado_despacho_id], references: [id], onUpdate: Restrict, map: "fk_des_estado")
   rol_guardia_movil    rol_guardia_movil @relation(fields: [rol_guardia_movil_id], references: [id], onUpdate: Restrict, map: "fk_des_movil")
@@ -590,6 +618,7 @@ model despacho {
   @@index([estado_despacho_id], map: "fk_des_estado")
   @@index([rol_guardia_movil_id], map: "fk_des_movil")
   @@index([solicitud_id], map: "fk_des_solicitud")
+  @@index([condicion_cierre_id], map: "fk_des_condicion_cierre")
 }
 
 model direccion {
@@ -679,17 +708,18 @@ model notificacion {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model paciente_dialisis {
-  id                Int                 @id @default(autoincrement())
-  persona_id        Int                 @unique(map: "uk_persona")
-  centro_dialisis   String              @db.VarChar(200)
-  dias_semana       String              @db.VarChar(50)
-  hora_turno        DateTime?           @db.Time(0)
-  observacion       String?             @db.Text
-  activo            Boolean             @default(true)
-  created_at        DateTime            @default(now()) @db.DateTime(0)
-  updated_at        DateTime            @default(now()) @db.DateTime(0)
-  persona           persona             @relation(fields: [persona_id], references: [id], onUpdate: Restrict, map: "fk_pd_persona")
-  traslado_dialisis traslado_dialisis[]
+  id                   Int                    @id @default(autoincrement())
+  persona_id           Int                    @unique(map: "uk_persona")
+  centro_dialisis      String                 @db.VarChar(200)
+  dias_semana          String                 @db.VarChar(50)
+  hora_turno           DateTime?              @db.Time(0)
+  observacion          String?                @db.Text
+  activo               Boolean                @default(true)
+  created_at           DateTime               @default(now()) @db.DateTime(0)
+  updated_at           DateTime               @default(now()) @db.DateTime(0)
+  chatbot_confirmacion chatbot_confirmacion[]
+  persona              persona                @relation(fields: [persona_id], references: [id], onUpdate: Restrict, map: "fk_pd_persona")
+  traslado_dialisis    traslado_dialisis[]
 }
 
 model tipo_contacto {
@@ -731,24 +761,25 @@ model traslado_dialisis {
 
   @@index([paciente_dialisis_id], map: "fk_td_paciente_dialisis")
 }
+
 model configuracion {
-  id                      Int      @id @default(1)
-  nombre_sistema          String   @db.VarChar(100)
-  telefono_emergencias    String   @db.VarChar(20)
-  direccion               String   @db.VarChar(255)
-  ciudad                  String   @db.VarChar(100)
-  tiempo_sesion_minutos   Int      @default(480)
-  exigir_habilitacion_vigente Boolean @default(false)
-  updated_at              DateTime @default(now()) @db.DateTime(0)
+  id                          Int       @id @default(1)
+  nombre_sistema              String?   @default("SEME") @db.VarChar(100)
+  telefono_emergencias        String?   @default("141") @db.VarChar(20)
+  direccion                   String?   @default("Ministerio de Salud Pública y Bienestar Social") @db.VarChar(255)
+  ciudad                      String?   @default("Asunción, Paraguay") @db.VarChar(100)
+  tiempo_sesion_minutos       Int?      @default(480)
+  exigir_habilitacion_vigente Boolean   @default(false)
+  updated_at                  DateTime? @default(now()) @db.DateTime(0)
 }
 
 model horario_guardia {
-  id         Int      @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
   usuario_id Int
-  dia_semana Int      @db.TinyInt
-  activo     Boolean  @default(true)
-  created_at DateTime @default(now()) @db.DateTime(0)
-  usuario    usuario  @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_hg_usuario")
+  dia_semana Int       @db.TinyInt
+  activo     Boolean?  @default(true)
+  created_at DateTime? @default(now()) @db.DateTime(0)
+  usuario    usuario   @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_hg_usuario")
 
   @@index([usuario_id], map: "fk_hg_usuario")
 }
@@ -766,16 +797,275 @@ model estado_temporal_personal {
   activo                 Boolean  @default(true)
   created_at             DateTime @default(now()) @db.DateTime(0)
   updated_at             DateTime @default(now()) @db.DateTime(0)
-  usuario                usuario  @relation("etp_usuario", fields: [usuario_id], references: [id])
-  usuario_relacionado    usuario? @relation("etp_relacionado", fields: [usuario_relacionado_id], references: [id])
-  registrador            usuario  @relation("etp_registrador", fields: [registrado_por], references: [id])
+  registrador            usuario  @relation("etp_registrador", fields: [registrado_por], references: [id], onUpdate: Restrict, map: "fk_etp_registrador")
+  usuario_relacionado    usuario? @relation("etp_relacionado", fields: [usuario_relacionado_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_etp_relacionado")
+  usuario                usuario  @relation("etp_usuario", fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_etp_usuario")
 
   @@index([usuario_id], map: "fk_etp_usuario")
   @@index([usuario_relacionado_id], map: "fk_etp_relacionado")
   @@index([registrado_por], map: "fk_etp_registrador")
+  @@index([usuario_id, activo, fecha_inicio, fecha_fin], map: "idx_etp_vigencia")
 }
 
 model paramedico_habilitado {
+  id                 Int       @id @default(autoincrement())
+  usuario_id         Int       @unique(map: "usuario_id")
+  nro_registro       String?   @db.VarChar(30)
+  fecha_vencimiento  DateTime? @db.Date
+  habilitado_por     Int
+  fecha_habilitacion DateTime  @db.Date
+  activo             Boolean?  @default(true)
+  created_at         DateTime? @default(now()) @db.DateTime(0)
+  updated_at         DateTime? @default(now()) @db.DateTime(0)
+  usuario            usuario   @relation("paramedico_usuario", fields: [usuario_id], references: [id], onUpdate: Restrict, map: "paramedico_habilitado_ibfk_1")
+  habilitador        usuario   @relation("paramedico_habilitador", fields: [habilitado_por], references: [id], onUpdate: Restrict, map: "paramedico_habilitado_ibfk_2")
+
+  @@index([habilitado_por], map: "habilitado_por")
+}
+
+model conductor_habilitado {
+  id                 Int       @id @default(autoincrement())
+  usuario_id         Int       @unique(map: "usuario_id")
+  nro_licencia       String?   @db.VarChar(30)
+  categoria          String?   @db.VarChar(10)
+  fecha_vencimiento  DateTime? @db.Date
+  habilitado_por     Int
+  fecha_habilitacion DateTime  @db.Date
+  activo             Boolean?  @default(true)
+  created_at         DateTime? @default(now()) @db.DateTime(0)
+  updated_at         DateTime? @default(now()) @db.DateTime(0)
+  usuario            usuario   @relation("conductor_usuario", fields: [usuario_id], references: [id], onUpdate: Restrict, map: "conductor_habilitado_ibfk_1")
+  habilitador        usuario   @relation("conductor_habilitador", fields: [habilitado_por], references: [id], onUpdate: Restrict, map: "conductor_habilitado_ibfk_2")
+
+  @@index([habilitado_por], map: "habilitado_por")
+}
+
+model orden_trabajo_transporte {
+  id            Int       @id @default(autoincrement())
+  nro_orden     String    @unique(map: "nro_orden") @db.VarChar(20)
+  tipo          String    @default("ORDINARIO") @db.VarChar(20)
+  movil_id      Int
+  conductor_id  Int
+  area_asignada String?   @default("Dpto. de Transporte") @db.VarChar(100)
+  fecha_inicio  DateTime  @db.Date
+  fecha_fin     DateTime  @db.Date
+  hora_inicio   String    @db.VarChar(5)
+  hora_fin      String    @db.VarChar(5)
+  km_salida     Int?
+  km_llegada    Int?
+  km_estimado   Int?
+  trabajos      String?   @db.Text
+  creado_por    Int
+  estado        String?   @default("ACTIVA") @db.VarChar(20)
+  created_at    DateTime? @default(now()) @db.DateTime(0)
+  updated_at    DateTime? @default(now()) @db.DateTime(0)
+  movil         movil     @relation(fields: [movil_id], references: [id], onUpdate: Restrict, map: "orden_trabajo_transporte_ibfk_1")
+  conductor     usuario   @relation("orden_conductor", fields: [conductor_id], references: [id], onUpdate: Restrict, map: "orden_trabajo_transporte_ibfk_2")
+  creador       usuario   @relation("orden_creador", fields: [creado_por], references: [id], onUpdate: Restrict, map: "orden_trabajo_transporte_ibfk_3")
+
+  @@index([conductor_id], map: "conductor_id")
+  @@index([creado_por], map: "creado_por")
+  @@index([movil_id], map: "movil_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model auditoria {
+  id             BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  fecha_hora     DateTime   @default(now()) @db.DateTime(0)
+  usuario_id     Int?
+  usuario_nombre String?    @db.VarChar(200)
+  rol_nombre     String?    @db.VarChar(50)
+  ip             String?    @db.VarChar(45)
+  dispositivo    String?    @db.VarChar(100)
+  modulo         String     @db.VarChar(50)
+  tabla          String     @db.VarChar(50)
+  operacion      String     @db.VarChar(10)
+  registro_id    Int?
+  campo          String?    @db.VarChar(100)
+  valor_antes    String?    @db.Text
+  valor_despues  String?    @db.Text
+  descripcion    String?    @db.Text
+  solicitud_id   Int?
+  resultado      String     @default("EXITO") @db.VarChar(20)
+  detalle_error  String?    @db.Text
+  solicitud      solicitud? @relation(fields: [solicitud_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_aud_solicitud")
+  usuario        usuario?   @relation(fields: [usuario_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_aud_usuario")
+
+  @@index([fecha_hora], map: "idx_aud_fecha")
+  @@index([modulo], map: "idx_aud_modulo")
+  @@index([operacion], map: "idx_aud_operacion")
+  @@index([tabla, registro_id], map: "idx_aud_registro")
+  @@index([solicitud_id], map: "idx_aud_solicitud")
+  @@index([tabla], map: "idx_aud_tabla")
+  @@index([usuario_id], map: "idx_aud_usuario")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model chatbot_confirmacion {
+  id                   Int               @id @default(autoincrement())
+  paciente_dialisis_id Int
+  solicitud_id         Int?
+  fecha_recordatorio   DateTime          @default(now()) @db.DateTime(0)
+  canal                String            @default("WHATSAPP") @db.VarChar(20)
+  respuesta            String?           @db.VarChar(20)
+  fecha_respuesta      DateTime?         @db.DateTime(0)
+  intentos             Int               @default(1) @db.TinyInt
+  created_at           DateTime          @default(now()) @db.DateTime(0)
+  paciente_dialisis    paciente_dialisis @relation(fields: [paciente_dialisis_id], references: [id], onUpdate: Restrict, map: "fk_cc_paciente")
+  solicitud            solicitud?        @relation(fields: [solicitud_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_cc_solicitud")
+
+  @@index([paciente_dialisis_id], map: "fk_cc_paciente")
+  @@index([solicitud_id], map: "fk_cc_solicitud")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model cobertura {
+  id                                        Int                    @id @default(autoincrement())
+  solicitud_id                              Int
+  coordinador_id                            Int
+  despachante_id                            Int
+  rol_guardia_movil_id                      Int
+  evento                                    String                 @db.VarChar(200)
+  lugar                                     String                 @db.VarChar(255)
+  latitud                                   Decimal?               @db.Decimal(10, 7)
+  longitud                                  Decimal?               @db.Decimal(10, 7)
+  fecha_hora_inicio                         DateTime               @db.DateTime(0)
+  fecha_hora_fin                            DateTime?              @db.DateTime(0)
+  estado                                    String                 @default("PENDIENTE") @db.VarChar(20)
+  observacion                               String?                @db.Text
+  created_at                                DateTime               @default(now()) @db.DateTime(0)
+  updated_at                                DateTime               @default(now()) @db.DateTime(0)
+  usuario_cobertura_coordinador_idTousuario usuario                @relation("cobertura_coordinador_idTousuario", fields: [coordinador_id], references: [id], onUpdate: Restrict, map: "fk_cob_coordinador")
+  usuario_cobertura_despachante_idTousuario usuario                @relation("cobertura_despachante_idTousuario", fields: [despachante_id], references: [id], onUpdate: Restrict, map: "fk_cob_despachante")
+  rol_guardia_movil                         rol_guardia_movil      @relation(fields: [rol_guardia_movil_id], references: [id], onUpdate: Restrict, map: "fk_cob_movil")
+  solicitud                                 solicitud              @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_cob_solicitud")
+  cobertura_asistencia                      cobertura_asistencia[]
+  orden_trabajo                             orden_trabajo[]
+
+  @@index([coordinador_id], map: "fk_cob_coordinador")
+  @@index([despachante_id], map: "fk_cob_despachante")
+  @@index([rol_guardia_movil_id], map: "fk_cob_movil")
+  @@index([solicitud_id], map: "fk_cob_solicitud")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model cobertura_asistencia {
+  id              Int       @id @default(autoincrement())
+  cobertura_id    Int
+  usuario_id      Int
+  descripcion     String    @db.Text
+  hora_asistencia DateTime  @default(now()) @db.DateTime(0)
+  created_at      DateTime  @default(now()) @db.DateTime(0)
+  cobertura       cobertura @relation(fields: [cobertura_id], references: [id], onUpdate: Restrict, map: "fk_ca_cobertura")
+  usuario         usuario   @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_ca_usuario")
+
+  @@index([cobertura_id], map: "fk_ca_cobertura")
+  @@index([usuario_id], map: "fk_ca_usuario")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model condicion_cierre {
+  id          Int        @id @default(autoincrement()) @db.UnsignedTinyInt
+  nombre      String     @unique(map: "uk_condicion_cierre") @db.VarChar(50)
+  descripcion String?    @db.VarChar(200)
+  activo      Boolean    @default(true)
+  despacho    despacho[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model hospital {
+  id                                                              Int                @id @default(autoincrement())
+  nombre                                                          String             @unique(map: "uk_hospital_nombre") @db.VarChar(200)
+  tipo                                                            String?            @db.VarChar(50)
+  calle                                                           String?            @db.VarChar(150)
+  nro                                                             String?            @db.VarChar(10)
+  barrio                                                          String?            @db.VarChar(100)
+  ciudad                                                          String?            @db.VarChar(100)
+  telefono                                                        String?            @db.VarChar(30)
+  latitud                                                         Decimal?           @db.Decimal(10, 7)
+  longitud                                                        Decimal?           @db.Decimal(10, 7)
+  activo                                                          Boolean            @default(true)
+  created_at                                                      DateTime           @default(now()) @db.DateTime(0)
+  updated_at                                                      DateTime           @default(now()) @db.DateTime(0)
+  ref_cama_clinica_ref_cama_clinica_hospital_destino_idTohospital ref_cama_clinica[] @relation("ref_cama_clinica_hospital_destino_idTohospital")
+  ref_cama_clinica_ref_cama_clinica_hospital_origen_idTohospital  ref_cama_clinica[] @relation("ref_cama_clinica_hospital_origen_idTohospital")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model orden_trabajo {
+  id                                                  Int               @id @default(autoincrement())
+  rol_guardia_movil_id                                Int
+  solicitud_id                                        Int?
+  cobertura_id                                        Int?
+  asistente_id                                        Int
+  coordinador_trans_id                                Int
+  estado                                              String            @default("EMITIDA") @db.VarChar(20)
+  observacion                                         String?           @db.Text
+  fecha_emision                                       DateTime          @default(now()) @db.DateTime(0)
+  fecha_aprobacion                                    DateTime?         @db.DateTime(0)
+  fecha_cierre                                        DateTime?         @db.DateTime(0)
+  created_at                                          DateTime          @default(now()) @db.DateTime(0)
+  updated_at                                          DateTime          @default(now()) @db.DateTime(0)
+  usuario_orden_trabajo_asistente_idTousuario         usuario           @relation("orden_trabajo_asistente_idTousuario", fields: [asistente_id], references: [id], onUpdate: Restrict, map: "fk_ot_asistente")
+  cobertura                                           cobertura?        @relation(fields: [cobertura_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_ot_cobertura")
+  usuario_orden_trabajo_coordinador_trans_idTousuario usuario           @relation("orden_trabajo_coordinador_trans_idTousuario", fields: [coordinador_trans_id], references: [id], onUpdate: Restrict, map: "fk_ot_coordinador")
+  rol_guardia_movil                                   rol_guardia_movil @relation(fields: [rol_guardia_movil_id], references: [id], onUpdate: Restrict, map: "fk_ot_movil")
+  solicitud                                           solicitud?        @relation(fields: [solicitud_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_ot_solicitud")
+
+  @@index([asistente_id], map: "fk_ot_asistente")
+  @@index([cobertura_id], map: "fk_ot_cobertura")
+  @@index([coordinador_trans_id], map: "fk_ot_coordinador")
+  @@index([rol_guardia_movil_id], map: "fk_ot_movil")
+  @@index([solicitud_id], map: "fk_ot_solicitud")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model paramedico_habilitado_respaldo_20260813 {
+  id                 Int       @default(0)
+  usuario_id         Int
+  nro_registro       String?   @db.VarChar(30)
+  fecha_vencimiento  DateTime? @db.Date
+  habilitado_por     Int
+  fecha_habilitacion DateTime  @db.Date
+  activo             Boolean?  @default(true)
+  created_at         DateTime? @default(now()) @db.DateTime(0)
+  updated_at         DateTime? @default(now()) @db.DateTime(0)
+
+  @@ignore
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model prioridad_log {
+  id              Int       @id @default(autoincrement())
+  solicitud_id    Int
+  prioridad_antes String    @db.VarChar(10)
+  prioridad_nueva String    @db.VarChar(10)
+  origen          String    @default("IA") @db.VarChar(20)
+  usuario_id      Int?
+  motivo          String?   @db.Text
+  created_at      DateTime  @default(now()) @db.DateTime(0)
+  solicitud       solicitud @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_pl_solicitud")
+  usuario         usuario?  @relation(fields: [usuario_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_pl_usuario")
+
+  @@index([solicitud_id], map: "fk_pl_solicitud")
+  @@index([usuario_id], map: "fk_pl_usuario")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model push_token {
+  id         Int      @id @default(autoincrement())
+  usuario_id Int
+  token      String   @db.Text
+  plataforma String   @default("ANDROID") @db.VarChar(10)
+  activo     Boolean  @default(true)
+  created_at DateTime @default(now()) @db.DateTime(0)
+  updated_at DateTime @default(now()) @db.DateTime(0)
+  usuario    usuario  @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_pt_usuario")
+
+  @@index([usuario_id], map: "fk_pt_usuario")
+}
+
+model medico_habilitado {
   id                 Int      @id @default(autoincrement())
   usuario_id         Int      @unique
   nro_registro       String   @db.VarChar(30)
@@ -785,45 +1075,33 @@ model paramedico_habilitado {
   activo             Boolean  @default(true)
   created_at         DateTime @default(now()) @db.DateTime(0)
   updated_at         DateTime @default(now()) @db.DateTime(0)
-  usuario            usuario  @relation("paramedico_usuario", fields: [usuario_id], references: [id])
-  habilitador        usuario  @relation("paramedico_habilitador", fields: [habilitado_por], references: [id])
+  usuario            usuario  @relation("medico_usuario", fields: [usuario_id], references: [id])
+  habilitador        usuario  @relation("medico_habilitador", fields: [habilitado_por], references: [id])
 }
 
-model conductor_habilitado {
-  id                 Int      @id @default(autoincrement())
-  usuario_id         Int      @unique
-  nro_licencia       String?  @db.VarChar(30)
-  categoria          String?  @db.VarChar(10)
+model arm_habilitado {
+  id                 Int       @id @default(autoincrement())
+  usuario_id         Int       @unique
+  nro_registro       String?   @db.VarChar(30)
   fecha_vencimiento  DateTime? @db.Date
   habilitado_por     Int
-  fecha_habilitacion DateTime @db.Date
-  activo             Boolean  @default(true)
-  created_at         DateTime @default(now()) @db.DateTime(0)
-  updated_at         DateTime @default(now()) @db.DateTime(0)
-  usuario            usuario  @relation("conductor_usuario", fields: [usuario_id], references: [id])
-  habilitador        usuario  @relation("conductor_habilitador", fields: [habilitado_por], references: [id])
+  fecha_habilitacion DateTime  @db.Date
+  activo             Boolean   @default(true)
+  created_at         DateTime  @default(now()) @db.DateTime(0)
+  updated_at         DateTime  @default(now()) @db.DateTime(0)
+  usuario            usuario   @relation("arm_usuario", fields: [usuario_id], references: [id])
+  habilitador        usuario   @relation("arm_habilitador", fields: [habilitado_por], references: [id])
 }
 
-model orden_trabajo_transporte {
-  id            Int      @id @default(autoincrement())
-  nro_orden     String   @unique @db.VarChar(20)
-  tipo          String   @default("ORDINARIO") @db.VarChar(20)
-  movil_id      Int
-  conductor_id  Int
-  area_asignada String?  @default("Dpto. de Transporte") @db.VarChar(100)
-  fecha_inicio  DateTime @db.Date
-  fecha_fin     DateTime @db.Date
-  hora_inicio String @db.VarChar(5)
-  hora_fin    String @db.VarChar(5)
-  km_salida     Int?
-  km_llegada    Int?
-  km_estimado   Int?
-  trabajos      String?  @db.Text
-  creado_por    Int
-  estado        String   @default("ACTIVA") @db.VarChar(20)
-  created_at    DateTime @default(now()) @db.DateTime(0)
-  updated_at    DateTime @default(now()) @db.DateTime(0)
-  movil         movil    @relation(fields: [movil_id], references: [id])
-  conductor     usuario  @relation("orden_conductor", fields: [conductor_id], references: [id])
-  creador       usuario  @relation("orden_creador", fields: [creado_por], references: [id])
+model turno_regulacion {
+  id         Int      @id @default(autoincrement())
+  usuario_id Int
+  dia_semana Int      @db.TinyInt
+  turno      String   @db.VarChar(10)
+  vinculo    Int?     @db.TinyInt
+  activo     Boolean  @default(true)
+  created_at DateTime @default(now()) @db.DateTime(0)
+  usuario    usuario  @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_tr_usuario")
+
+  @@index([usuario_id], map: "fk_tr_usuario")
 }

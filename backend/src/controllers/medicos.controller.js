@@ -1,6 +1,31 @@
 const prisma = require('../config/db');
 const { normalizarTurnosMedico } = require('../services/turnos-regulacion');
 
+// Convierte fechas de Excel: número de serie, texto ISO o dd/mm/aaaa
+const parseFecha = (valor) => {
+  if (!valor) return null;
+  if (typeof valor === 'number') return new Date((valor - 25569) * 86400 * 1000);
+  const f = new Date(valor);
+  if (!isNaN(f.getTime())) return f;
+  const p = String(valor).split('/');
+  if (p.length === 3) return new Date(`${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`);
+  return null;
+};
+
+// Turnos desde una celda de Excel: "1D,1N,4D" -> [{dia_semana, turno}]
+// dígito = día (1 Lun … 7 Dom); letra = D (diurno/mañana) o N (nocturno/noche)
+const parseTurnos = (valor) => {
+  if (!valor) return [];
+  return String(valor).split(',')
+    .map(tok => tok.trim().toUpperCase())
+    .filter(Boolean)
+    .map(tok => {
+      const m = tok.match(/^([1-7])\s*[:\-]?\s*([DN])$/);
+      return m ? { dia_semana: parseInt(m[1]), turno: m[2] === 'N' ? 'NOCTURNO' : 'DIURNO' } : null;
+    })
+    .filter(Boolean);
+};
+
 const getMedicos = async (req, res) => {
   try {
     const medicos = await prisma.medico_habilitado.findMany({
@@ -215,7 +240,121 @@ const toggleActivo = async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Error al actualizar médico' }); }
 };
 
+// Alta masiva de médicos reguladores desde Excel
+const crearMedicosMasivo = async (req, res) => {
+  const { medicos } = req.body;
+  if (!Array.isArray(medicos) || medicos.length === 0) {
+    return res.status(400).json({ error: 'No se enviaron médicos' });
+  }
+
+  const rol = await prisma.rol.findFirst({ where: { nombre: 'MEDICO_REGULADOR' } });
+  if (!rol) return res.status(400).json({ error: 'Rol MEDICO_REGULADOR no encontrado' });
+
+  const habilitadoPor = req.usuario.id;
+  const resultados = { creados: 0, errores: [] };
+
+  for (const m of medicos) {
+    try {
+      if (!m.nro_documento || !m.primer_nombre || !m.primer_apellido) {
+        resultados.errores.push({ documento: m.nro_documento ?? '?', motivo: 'Datos incompletos' });
+        continue;
+      }
+      if (!m.nro_registro) {
+        resultados.errores.push({ documento: m.nro_documento, motivo: 'Falta la matrícula (nro_registro)' });
+        continue;
+      }
+
+      // Los turnos se validan antes de crear nada de esta fila
+      const { filas, error: errorTurnos } = normalizarTurnosMedico(parseTurnos(m.turnos));
+      if (errorTurnos) {
+        resultados.errores.push({ documento: m.nro_documento, motivo: errorTurnos });
+        continue;
+      }
+
+      let personaId = null;
+      const existe = await prisma.persona.findFirst({ where: { nro_documento: String(m.nro_documento) } });
+      if (existe) {
+        personaId = existe.id;
+      } else {
+        const persona = await prisma.persona.create({
+          data: {
+            primer_nombre: String(m.primer_nombre).toUpperCase(),
+            segundo_nombre: m.segundo_nombre ? String(m.segundo_nombre).toUpperCase() : null,
+            primer_apellido: String(m.primer_apellido).toUpperCase(),
+            segundo_apellido: m.segundo_apellido ? String(m.segundo_apellido).toUpperCase() : null,
+            nro_documento: String(m.nro_documento),
+            tipo_documento: m.tipo_documento ? parseInt(m.tipo_documento) : 1,
+            sexo: m.sexo ?? 'M',
+            fecha_nacimiento: parseFecha(m.fecha_nacimiento) ?? new Date('1900-01-01')
+          }
+        });
+        personaId = persona.id;
+      }
+
+      let usuarioId = null;
+      const usuarioExiste = await prisma.usuario.findFirst({ where: { persona_id: personaId } });
+      if (usuarioExiste) {
+        usuarioId = usuarioExiste.id;
+        const yaHab = await prisma.medico_habilitado.findFirst({ where: { usuario_id: usuarioId } });
+        if (yaHab) {
+          resultados.errores.push({ documento: m.nro_documento, motivo: 'Ya está habilitado como médico regulador' });
+          continue;
+        }
+      } else {
+        const persona = await prisma.persona.findUnique({ where: { id: personaId } });
+        const iniciales = `${persona.primer_nombre[0]}${persona.primer_apellido[0]}`.toUpperCase();
+        const password = `${iniciales}${persona.nro_documento}`;
+        const usuario = await prisma.usuario.create({
+          data: { persona_id: personaId, rol_id: rol.id, password, activo: true, debe_cambiar_password: true }
+        });
+        usuarioId = usuario.id;
+      }
+
+      await prisma.medico_habilitado.create({
+        data: {
+          usuario_id: usuarioId,
+          nro_registro: String(m.nro_registro),
+          fecha_vencimiento: parseFecha(m.fecha_vencimiento) ?? new Date(),
+          habilitado_por: habilitadoPor,
+          fecha_habilitacion: new Date(),
+          activo: true
+        }
+      });
+
+      if (filas.length > 0) {
+        await prisma.turno_regulacion.createMany({ data: filas.map(f => ({ usuario_id: usuarioId, ...f })) });
+      }
+
+      if (m.celulares) {
+        const nums = String(m.celulares).split(',').map(n => n.trim()).filter(Boolean);
+        for (let i = 0; i < nums.length; i++) {
+          await prisma.contacto.create({ data: { persona_id: personaId, tipo_contacto_id: 1, valor: nums[i], principal: i === 0, activo: true } });
+        }
+      }
+      if (m.whatsapps) {
+        const nums = String(m.whatsapps).split(',').map(n => n.trim()).filter(Boolean);
+        for (const num of nums) {
+          await prisma.contacto.create({ data: { persona_id: personaId, tipo_contacto_id: 3, valor: num, principal: false, activo: true } });
+        }
+      }
+      if (m.emails) {
+        const mails = String(m.emails).split(',').map(x => x.trim()).filter(Boolean);
+        for (let i = 0; i < mails.length; i++) {
+          await prisma.contacto.create({ data: { persona_id: personaId, tipo_contacto_id: 4, valor: mails[i], principal: i === 0, activo: true } });
+        }
+      }
+
+      resultados.creados++;
+    } catch (err) {
+      console.error(err);
+      resultados.errores.push({ documento: m.nro_documento, motivo: 'Error interno' });
+    }
+  }
+
+  res.json(resultados);
+};
+
 module.exports = {
-  getMedicos, crearMedico, agregarContacto, editarContacto, eliminarContacto,
-  actualizarRegistro, actualizarTurnos, toggleActivo
+  getMedicos, crearMedico, crearMedicosMasivo, agregarContacto, editarContacto,
+  eliminarContacto, actualizarRegistro, actualizarTurnos, toggleActivo
 };

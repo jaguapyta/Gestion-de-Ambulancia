@@ -4,7 +4,7 @@ const auth = require('../middlewares/auth');
 const roles = require('../middlewares/roles');
 const P = require('../config/permisos');
 const {
-  getArms, crearArm, agregarContacto, editarContacto, eliminarContacto,
+  getArms, crearArm, crearArmMasivo, agregarContacto, editarContacto, eliminarContacto,
   actualizarRegistro, actualizarVinculos, toggleActivo
 } = require('../controllers/arm.controller');
 
@@ -12,6 +12,7 @@ const GESTIONAR = ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDI
 
 router.get('/', auth, roles(...P.LEER_ARM), getArms);
 router.post('/', auth, roles(...GESTIONAR), crearArm);
+router.post('/masivo', auth, roles(...GESTIONAR), crearArmMasivo);
 router.post('/:id/contacto', auth, roles(...GESTIONAR), agregarContacto);
 router.put('/:id/contacto/:contactoId', auth, roles(...GESTIONAR), editarContacto);
 router.delete('/:id/contacto/:contactoId', auth, roles(...GESTIONAR), eliminarContacto);

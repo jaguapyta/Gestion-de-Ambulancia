@@ -5,12 +5,12 @@ import * as XLSX from 'xlsx';
 import ModalEstadosTemporales from '../../../../components/ModalEstadosTemporales';
 import ModalResetearPassword from '../../../../components/ModalResetearPassword';
 import ModalEditarFuncionario from '../../../../components/ModalEditarFuncionario';
-import ModalTurnosMedico from '../../../../components/ModalTurnosMedico';
+import ModalVinculosArm from '../../../../components/ModalVinculosArm';
 
 interface Contacto { id: number; valor: string; principal: boolean; tipo_contacto: { id: number; nombre: string }; }
 interface TurnoReg { id: number; dia_semana: number; turno: string; vinculo: number | null; }
-interface Medico {
-  id: number; activo: boolean; nro_registro: string; fecha_vencimiento: string;
+interface Arm {
+  id: number; activo: boolean; nro_registro: string | null; fecha_vencimiento: string | null;
   usuario: {
     id: number; activo: boolean;
     persona: { primer_nombre: string; segundo_nombre: string | null; primer_apellido: string; segundo_apellido: string | null; nro_documento: string; contacto: Contacto[]; };
@@ -22,29 +22,41 @@ interface Persona {
   id: number; primer_nombre: string; segundo_nombre: string | null; primer_apellido: string; segundo_apellido: string | null;
   nro_documento: string; tipo_documento: number; sexo: string; fecha_nacimiento: string;
 }
+interface Turno { dia_semana: number; turno: 'DIURNO' | 'NOCTURNO'; }
+interface Vinculo { a: Turno; b: Turno; }
 
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const DIAS_AB = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const TIPOS_CONTACTO = [
   { id: 1, nombre: 'CELULAR' }, { id: 2, nombre: 'FIJO' }, { id: 3, nombre: 'WHATSAPP' }, { id: 4, nombre: 'EMAIL' },
 ];
-const chipTurno = (t: TurnoReg) => `${DIAS_AB[t.dia_semana - 1]} ${t.turno === 'NOCTURNO' ? '🌙' : '☀️'}`;
+const chipTurno = (t: { dia_semana: number; turno: string }) => `${DIAS_AB[t.dia_semana - 1]} ${t.turno === 'NOCTURNO' ? '🌙' : '☀️'}`;
+const franja = (t: Turno) => (t.dia_semana - 1) * 2 + (t.turno === 'NOCTURNO' ? 1 : 0);
+const consecutivos = (a: Turno, b: Turno) => { const d = Math.abs(franja(a) - franja(b)); return d === 1 || d === 13; };
+const igual = (a: Turno, b: Turno) => a.dia_semana === b.dia_semana && a.turno === b.turno;
 
-export default function MedicosPage() {
-  const [medicos, setMedicos] = useState<Medico[]>([]);
+const vinculosDe = (turnos: TurnoReg[]) => {
+  const map = new Map<number, TurnoReg[]>();
+  turnos.forEach(t => { const k = t.vinculo ?? 0; if (!map.has(k)) map.set(k, []); map.get(k)!.push(t); });
+  return [...map.entries()].sort((x, y) => x[0] - y[0]);
+};
+
+export default function ArmPage() {
+  const [arms, setArms] = useState<Arm[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [modalAbierto, setModalAbierto] = useState(false);
   const [modalContactoAbierto, setModalContactoAbierto] = useState(false);
   const [modalEstadosAbierto, setModalEstadosAbierto] = useState(false);
   const [modalPasswordAbierto, setModalPasswordAbierto] = useState(false);
-  const [modalTurnosAbierto, setModalTurnosAbierto] = useState(false);
+  const [modalVinculosAbierto, setModalVinculosAbierto] = useState(false);
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false);
   const [modalImportAbierto, setModalImportAbierto] = useState(false);
   const [archivoData, setArchivoData] = useState<any[]>([]);
   const [importando, setImportando] = useState(false);
   const [resultadoImport, setResultadoImport] = useState<{ creados: number; errores: any[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [seleccionado, setSeleccionado] = useState<Medico | null>(null);
+  const [seleccionado, setSeleccionado] = useState<Arm | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [passwordGenerada, setPasswordGenerada] = useState('');
@@ -59,7 +71,7 @@ export default function MedicosPage() {
     nro_documento: '', tipo_documento: '1', sexo: 'M', fecha_nacimiento: '', persona_id: '',
     nro_registro: '', fecha_vencimiento: ''
   });
-  const [turnosSel, setTurnosSel] = useState<{ dia_semana: number; turno: 'DIURNO' | 'NOCTURNO' }[]>([]);
+  const [vinculos, setVinculos] = useState<Vinculo[]>([{ a: { dia_semana: 1, turno: 'DIURNO' }, b: { dia_semana: 3, turno: 'DIURNO' } }]);
   const [contactos, setContactos] = useState<{ tipo_contacto_id: string; valor: string; principal: boolean }[]>([]);
   const [formContacto, setFormContacto] = useState({ tipo_contacto_id: '1', valor: '' });
 
@@ -67,19 +79,19 @@ export default function MedicosPage() {
 
   const cargar = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/medicos', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch('http://localhost:3001/api/arm', { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setMedicos(data); })
+      .then(data => { if (Array.isArray(data)) setArms(data); })
       .catch(err => console.error(err))
       .finally(() => setCargando(false));
   };
   useEffect(() => { cargar(); }, []);
 
-  const getNombre = (m: Medico) =>
-    `${m.usuario.persona.primer_nombre} ${m.usuario.persona.segundo_nombre ?? ''} ${m.usuario.persona.primer_apellido} ${m.usuario.persona.segundo_apellido ?? ''}`.trim();
+  const getNombre = (a: Arm) =>
+    `${a.usuario.persona.primer_nombre} ${a.usuario.persona.segundo_nombre ?? ''} ${a.usuario.persona.primer_apellido} ${a.usuario.persona.segundo_apellido ?? ''}`.trim();
 
-  const filtrados = medicos.filter(m =>
-    getNombre(m).toLowerCase().includes(busqueda.toLowerCase()) || m.usuario.persona.nro_documento.includes(busqueda));
+  const filtrados = arms.filter(a =>
+    getNombre(a).toLowerCase().includes(busqueda.toLowerCase()) || a.usuario.persona.nro_documento.includes(busqueda));
 
   const buscarPorDocumento = async () => {
     if (!documento) return;
@@ -104,11 +116,11 @@ export default function MedicosPage() {
     finally { setBuscandoDoc(false); }
   };
 
-  const tieneTurno = (d: number, t: 'DIURNO' | 'NOCTURNO') => turnosSel.some(x => x.dia_semana === d && x.turno === t);
-  const toggleTurno = (d: number, t: 'DIURNO' | 'NOCTURNO') => {
-    if (tieneTurno(d, t)) setTurnosSel(turnosSel.filter(x => !(x.dia_semana === d && x.turno === t)));
-    else setTurnosSel([...turnosSel, { dia_semana: d, turno: t }]);
+  const setSlot = (idx: number, slot: 'a' | 'b', campo: 'dia_semana' | 'turno', valor: any) => {
+    setVinculos(vinculos.map((v, i) => i === idx ? { ...v, [slot]: { ...v[slot], [campo]: campo === 'dia_semana' ? parseInt(valor) : valor } } : v));
   };
+  const agregarVinculo = () => { if (vinculos.length < 3) setVinculos([...vinculos, { a: { dia_semana: 1, turno: 'DIURNO' }, b: { dia_semana: 3, turno: 'DIURNO' } }]); };
+  const quitarVinculo = (idx: number) => setVinculos(vinculos.filter((_, i) => i !== idx));
 
   const agregarContacto = () => {
     if (!formContacto.valor) return;
@@ -119,22 +131,25 @@ export default function MedicosPage() {
 
   const handleGuardar = async () => {
     if (!form.nro_documento) { setError('El documento es obligatorio.'); return; }
-    if (!form.nro_registro) { setError('El nro. de registro (matrícula) es obligatorio.'); return; }
-    if (!form.fecha_vencimiento) { setError('La fecha de vencimiento es obligatoria.'); return; }
-    if (turnosSel.length === 0) { setError('Asigná al menos un turno de 12h.'); return; }
+    if (vinculos.length === 0) { setError('Agregá al menos un vínculo.'); return; }
+    for (let i = 0; i < vinculos.length; i++) {
+      const { a, b } = vinculos[i];
+      if (igual(a, b)) { setError(`Vínculo ${i + 1}: los dos turnos no pueden ser el mismo.`); return; }
+      if (consecutivos(a, b)) { setError(`Vínculo ${i + 1}: los turnos no pueden ir consecutivos (24h seguidas).`); return; }
+    }
     if (contactos.length === 0) { setError('Agregá al menos un contacto.'); return; }
     if (personaNueva && (!form.primer_nombre || !form.primer_apellido || !form.fecha_nacimiento)) {
       setError('Completá todos los campos obligatorios.'); return;
     }
     setGuardando(true); setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/medicos', {
+      const res = await fetch('http://localhost:3001/api/arm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ ...form, turnos: turnosSel, contactos })
+        body: JSON.stringify({ ...form, vinculos: vinculos.map(v => [v.a, v.b]), contactos })
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Error al crear médico'); return; }
+      if (!res.ok) { setError(data.error ?? 'Error al crear ARM'); return; }
       setPasswordGenerada(data.password_generada ?? '');
       cargar();
     } catch { setError('Error de conexión'); }
@@ -145,7 +160,7 @@ export default function MedicosPage() {
     if (!seleccionado || !formContacto.valor) return;
     setGuardando(true);
     try {
-      await fetch(`http://localhost:3001/api/medicos/${seleccionado.id}/contacto`, {
+      await fetch(`http://localhost:3001/api/arm/${seleccionado.id}/contacto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(formContacto)
@@ -156,7 +171,7 @@ export default function MedicosPage() {
 
   const toggleActivo = async (id: number, activo: boolean) => {
     try {
-      await fetch(`http://localhost:3001/api/medicos/${id}/activo`, {
+      await fetch(`http://localhost:3001/api/arm/${id}/activo`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ activo: !activo })
@@ -167,8 +182,9 @@ export default function MedicosPage() {
 
   const cerrarModal = () => {
     setModalAbierto(false); setPasswordGenerada(''); setError(''); setDocumento('');
-    setPersonaEncontrada(null); setPersonaNueva(false); setTurnosSel([]); setContactos([]);
-    setFormContacto({ tipo_contacto_id: '1', valor: '' });
+    setPersonaEncontrada(null); setPersonaNueva(false);
+    setVinculos([{ a: { dia_semana: 1, turno: 'DIURNO' }, b: { dia_semana: 3, turno: 'DIURNO' } }]);
+    setContactos([]); setFormContacto({ tipo_contacto_id: '1', valor: '' });
     setForm({ primer_nombre: '', segundo_nombre: '', primer_apellido: '', segundo_apellido: '', nro_documento: '', tipo_documento: '1', sexo: 'M', fecha_nacimiento: '', persona_id: '', nro_registro: '', fecha_vencimiento: '' });
   };
 
@@ -189,10 +205,10 @@ export default function MedicosPage() {
     if (archivoData.length === 0) return;
     setImportando(true);
     try {
-      const res = await fetch('http://localhost:3001/api/medicos/masivo', {
+      const res = await fetch('http://localhost:3001/api/arm/masivo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
-        body: JSON.stringify({ medicos: archivoData })
+        body: JSON.stringify({ arms: archivoData })
       });
       const data = await res.json();
       setResultadoImport(data);
@@ -206,34 +222,35 @@ export default function MedicosPage() {
 
   const descargarPlantilla = () => {
     const datos = [{
-      nro_documento: '1234567', primer_nombre: 'JUAN', segundo_nombre: 'CARLOS',
-      primer_apellido: 'PÉREZ', segundo_apellido: 'GARCÍA', sexo: 'M', fecha_nacimiento: '1985-06-20',
-      nro_registro: '12345', fecha_vencimiento: '2027-12-31', turnos: '1D,1N,4D',
-      celulares: '0981123456', whatsapps: '0981123456', emails: 'juan@email.com'
+      nro_documento: '1234567', primer_nombre: 'ANA', segundo_nombre: 'MARÍA',
+      primer_apellido: 'LÓPEZ', segundo_apellido: 'BENÍTEZ', sexo: 'F', fecha_nacimiento: '1990-03-10',
+      nro_registro: '', fecha_vencimiento: '', vinculos: '1D+3D;2N+5D',
+      celulares: '0981123456', whatsapps: '0981123456', emails: 'ana@email.com'
     }];
     const instrucciones = [
       { Columna: 'nro_documento', Obligatorio: 'SI', Descripcion: 'Cédula de identidad', Ejemplo: '1234567' },
-      { Columna: 'primer_nombre', Obligatorio: 'SI', Descripcion: 'Primer nombre', Ejemplo: 'JUAN' },
-      { Columna: 'segundo_nombre', Obligatorio: 'NO', Descripcion: 'Segundo nombre', Ejemplo: 'CARLOS' },
-      { Columna: 'primer_apellido', Obligatorio: 'SI', Descripcion: 'Primer apellido', Ejemplo: 'PÉREZ' },
-      { Columna: 'segundo_apellido', Obligatorio: 'NO', Descripcion: 'Segundo apellido', Ejemplo: 'GARCÍA' },
-      { Columna: 'sexo', Obligatorio: 'SI', Descripcion: 'M o F', Ejemplo: 'M' },
-      { Columna: 'fecha_nacimiento', Obligatorio: 'SI', Descripcion: 'AAAA-MM-DD', Ejemplo: '1985-06-20' },
-      { Columna: 'nro_registro', Obligatorio: 'SI', Descripcion: 'Matrícula profesional', Ejemplo: '12345' },
-      { Columna: 'fecha_vencimiento', Obligatorio: 'SI', Descripcion: 'Vencimiento matrícula AAAA-MM-DD', Ejemplo: '2027-12-31' },
-      { Columna: 'turnos', Obligatorio: 'NO', Descripcion: 'Turnos 12h: díaLetra separados por coma. Día 1=Lun…7=Dom, D=mañana(07-19) N=noche(19-07). Puede encadenar 24h.', Ejemplo: '1D,1N,4D' },
+      { Columna: 'primer_nombre', Obligatorio: 'SI', Descripcion: 'Primer nombre', Ejemplo: 'ANA' },
+      { Columna: 'segundo_nombre', Obligatorio: 'NO', Descripcion: 'Segundo nombre', Ejemplo: 'MARÍA' },
+      { Columna: 'primer_apellido', Obligatorio: 'SI', Descripcion: 'Primer apellido', Ejemplo: 'LÓPEZ' },
+      { Columna: 'segundo_apellido', Obligatorio: 'NO', Descripcion: 'Segundo apellido', Ejemplo: 'BENÍTEZ' },
+      { Columna: 'sexo', Obligatorio: 'SI', Descripcion: 'M o F', Ejemplo: 'F' },
+      { Columna: 'fecha_nacimiento', Obligatorio: 'SI', Descripcion: 'AAAA-MM-DD', Ejemplo: '1990-03-10' },
+      { Columna: 'nro_registro', Obligatorio: 'NO', Descripcion: 'Credencial/registro (si tiene)', Ejemplo: '' },
+      { Columna: 'fecha_vencimiento', Obligatorio: 'NO', Descripcion: 'Vencimiento AAAA-MM-DD (si aplica)', Ejemplo: '' },
+      { Columna: 'vinculos', Obligatorio: 'NO', Descripcion: 'Vínculos: ; separa vínculos, + une los 2 turnos. Turno = díaLetra (1=Lun…7=Dom, D=mañana N=noche). Los 2 turnos NO consecutivos. Máx 3.', Ejemplo: '1D+3D;2N+5D' },
       { Columna: 'celulares', Obligatorio: 'NO', Descripcion: 'Celulares separados por coma', Ejemplo: '0981123456' },
       { Columna: 'whatsapps', Obligatorio: 'NO', Descripcion: 'WhatsApp separados por coma', Ejemplo: '0981123456' },
-      { Columna: 'emails', Obligatorio: 'NO', Descripcion: 'Correos separados por coma', Ejemplo: 'juan@email.com' },
+      { Columna: 'emails', Obligatorio: 'NO', Descripcion: 'Correos separados por coma', Ejemplo: 'ana@email.com' },
     ];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datos), 'Médicos');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datos), 'ARM');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(instrucciones), 'Instrucciones');
-    XLSX.writeFile(wb, 'plantilla_medicos_seme.xlsx');
+    XLSX.writeFile(wb, 'plantilla_arm_seme.xlsx');
   };
 
   const diasRestantes = (f: string) => Math.ceil((new Date(f).getTime() - Date.now()) / 86400000);
-  const colorVenc = (f: string) => {
+  const colorVenc = (f: string | null) => {
+    if (!f) return { bg: '#f1f5f9', color: '#64748b', label: 'Sin vencimiento' };
     const d = diasRestantes(f);
     if (d < 0) return { bg: '#fef2f2', color: '#dc2626', label: 'VENCIDO' };
     if (d <= 30) return { bg: '#fff7ed', color: '#c2410c', label: `Vence en ${d} días` };
@@ -242,31 +259,31 @@ export default function MedicosPage() {
 
   const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: '7px', border: '0.5px solid #e5e7eb', fontSize: '13px', boxSizing: 'border-box' as const };
   const labelStyle = { fontSize: '12px', color: '#6b7280', display: 'block' as const, marginBottom: '6px' };
-  const chipStyle = (activo: boolean): React.CSSProperties => ({ flex: 1, padding: '6px 0', borderRadius: '7px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500, background: activo ? '#0a2540' : '#f0f4f8', color: activo ? 'white' : '#6b7280' });
+  const sel = { padding: '7px 10px', borderRadius: '7px', border: '0.5px solid #e5e7eb', fontSize: '13px', flex: 1 };
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Médicos reguladores</h1>
-          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Recursos Humanos del Centro de Regulación · turnos de 12h</p>
+          <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>ARM</h1>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Auxiliares de Regulación Médica · vínculos de 24h (2×12h no consecutivos)</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={() => setModalImportAbierto(true)} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
             📥 Importar Excel
           </button>
           <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-            + Nuevo médico
+            + Nuevo ARM
           </button>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         {[
-          { label: 'Total', value: medicos.length, color: '#0a2540' },
-          { label: 'Activos', value: medicos.filter(m => m.activo).length, color: '#15803d' },
-          { label: 'Inactivos', value: medicos.filter(m => !m.activo).length, color: '#dc2626' },
-          { label: 'Por vencer', value: medicos.filter(m => { const d = diasRestantes(m.fecha_vencimiento); return d >= 0 && d <= 30; }).length, color: '#c2410c' },
+          { label: 'Total', value: arms.length, color: '#0a2540' },
+          { label: 'Activos', value: arms.filter(a => a.activo).length, color: '#15803d' },
+          { label: 'Inactivos', value: arms.filter(a => !a.activo).length, color: '#dc2626' },
+          { label: 'Con 3 vínculos', value: arms.filter(a => vinculosDe(a.usuario.turno_regulacion).length >= 3).length, color: '#c2410c' },
         ].map(c => (
           <div key={c.label} style={{ background: 'white', borderRadius: '10px', padding: '16px', border: '0.5px solid #e5e7eb', borderTop: `3px solid ${c.color}` }}>
             <div style={{ fontSize: '24px', fontWeight: 500, color: c.color }}>{c.value}</div>
@@ -282,63 +299,69 @@ export default function MedicosPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
           <thead>
             <tr style={{ background: '#f8f9fb', borderBottom: '0.5px solid #e5e7eb' }}>
-              {['#', 'Nombre', 'Documento', 'Matrícula', 'Vencimiento', 'Turnos (12h)', 'Contactos', 'Estado', 'Acciones'].map(col => (
+              {['#', 'Nombre', 'Documento', 'Registro', 'Vencimiento', 'Vínculos (24h)', 'Contactos', 'Estado', 'Acciones'].map(col => (
                 <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', color: '#6b7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {cargando ? (
-              <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Cargando médicos...</td></tr>
+              <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Cargando ARM...</td></tr>
             ) : filtrados.length === 0 ? (
-              <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No se encontraron médicos</td></tr>
-            ) : filtrados.map((m, i) => {
-              const venc = colorVenc(m.fecha_vencimiento);
+              <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No se encontraron ARM</td></tr>
+            ) : filtrados.map((a, i) => {
+              const venc = colorVenc(a.fecha_vencimiento);
+              const grupos = vinculosDe(a.usuario.turno_regulacion);
               return (
-                <tr key={m.id} style={{ borderBottom: '0.5px solid #f3f4f6' }}>
+                <tr key={a.id} style={{ borderBottom: '0.5px solid #f3f4f6' }}>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#9ca3af' }}>{i + 1}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>{getNombre(m)}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{m.usuario.persona.nro_documento}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{m.nro_registro}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>{getNombre(a)}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{a.usuario.persona.nro_documento}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{a.nro_registro || '—'}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <span style={{ background: venc.bg, color: venc.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{venc.label}</span>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' as const }}>
-                      {m.usuario.turno_regulacion.map(t => (
-                        <span key={t.id} style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{chipTurno(t)}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {grupos.map(([n, ts]) => (
+                        <div key={n} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '10px', color: '#9ca3af', width: '24px' }}>V{n}</span>
+                          {ts.map(t => (
+                            <span key={t.id} style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{chipTurno(t)}</span>
+                          ))}
+                        </div>
                       ))}
-                      <button onClick={() => { setSeleccionado(m); setModalTurnosAbierto(true); }}
-                        style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
-                        {m.usuario.turno_regulacion.length === 0 ? '+ Asignar turnos' : 'Editar'}
+                      <button onClick={() => { setSeleccionado(a); setModalVinculosAbierto(true); }}
+                        style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap', textAlign: 'left' }}>
+                        {grupos.length === 0 ? '+ Asignar vínculos' : 'Editar'}
                       </button>
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {m.usuario.persona.contacto.map(c => (
+                      {a.usuario.persona.contacto.map(c => (
                         <div key={c.id} style={{ fontSize: '12px', color: '#6b7280' }}>
                           <span style={{ fontWeight: 500, color: '#0a2540' }}>{c.tipo_contacto.nombre}:</span> {c.valor}
                         </div>
                       ))}
-                      <button onClick={() => { setSeleccionado(m); setModalContactoAbierto(true); }}
+                      <button onClick={() => { setSeleccionado(a); setModalContactoAbierto(true); }}
                         style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', textAlign: 'left', padding: 0, marginTop: '2px' }}>
                         + Agregar contacto
                       </button>
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <span style={{ background: m.activo ? '#f0fdf4' : '#fef2f2', color: m.activo ? '#15803d' : '#dc2626', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>
-                      {m.activo ? 'Activo' : 'Inactivo'}
+                    <span style={{ background: a.activo ? '#f0fdf4' : '#fef2f2', color: a.activo ? '#15803d' : '#dc2626', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>
+                      {a.activo ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: '6px' }}>
-                      <button onClick={() => { setSeleccionado(m); setModalEditarAbierto(true); }} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>Editar</button>
-                      <button onClick={() => { setSeleccionado(m); setModalEstadosAbierto(true); }} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>Estados</button>
-                      <button onClick={() => { setSeleccionado(m); setModalPasswordAbierto(true); }} title="Restablecer contraseña" style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>🔑 Contraseña</button>
-                      <button onClick={() => toggleActivo(m.id, m.activo)} style={{ background: 'transparent', border: `0.5px solid ${m.activo ? '#fecaca' : '#bbf7d0'}`, padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: m.activo ? '#dc2626' : '#15803d', whiteSpace: 'nowrap' }}>
-                        {m.activo ? 'Dar de baja' : 'Dar de alta'}
+                      <button onClick={() => { setSeleccionado(a); setModalEditarAbierto(true); }} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>Editar</button>
+                      <button onClick={() => { setSeleccionado(a); setModalEstadosAbierto(true); }} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>Estados</button>
+                      <button onClick={() => { setSeleccionado(a); setModalPasswordAbierto(true); }} title="Restablecer contraseña" style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>🔑 Contraseña</button>
+                      <button onClick={() => toggleActivo(a.id, a.activo)} style={{ background: 'transparent', border: `0.5px solid ${a.activo ? '#fecaca' : '#bbf7d0'}`, padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: a.activo ? '#dc2626' : '#15803d', whiteSpace: 'nowrap' }}>
+                        {a.activo ? 'Dar de baja' : 'Dar de alta'}
                       </button>
                     </div>
                   </td>
@@ -349,14 +372,14 @@ export default function MedicosPage() {
         </table>
       </div>
 
-      {/* Modal nuevo médico */}
+      {/* Modal nuevo ARM */}
       {modalAbierto && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'white', borderRadius: '12px', padding: '28px', width: '560px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
             {passwordGenerada ? (
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '40px', marginBottom: '16px' }}>✅</div>
-                <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', marginBottom: '8px' }}>Médico registrado correctamente</h2>
+                <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', marginBottom: '8px' }}>ARM registrado correctamente</h2>
                 <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>Guardá la contraseña — deberá cambiarla al primer ingreso.</p>
                 <div style={{ background: '#f0fdf4', border: '0.5px solid #bbf7d0', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
                   <div style={{ fontSize: '12px', color: '#15803d', marginBottom: '6px' }}>Contraseña generada</div>
@@ -366,7 +389,7 @@ export default function MedicosPage() {
               </div>
             ) : (
               <>
-                <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', margin: '0 0 20px' }}>Nuevo médico regulador</h2>
+                <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', margin: '0 0 20px' }}>Nuevo ARM</h2>
                 {error && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '10px 14px', borderRadius: '7px', fontSize: '13px', marginBottom: '16px' }}>{error}</div>}
 
                 <div style={{ marginBottom: '20px' }}>
@@ -415,27 +438,44 @@ export default function MedicosPage() {
                 {(personaEncontrada || personaNueva) && (
                   <>
                     <div style={{ marginBottom: '20px' }}>
-                      <label style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', display: 'block', marginBottom: '10px' }}>Registro profesional</label>
+                      <label style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', display: 'block', marginBottom: '10px' }}>Registro (opcional)</label>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                        <div><label style={labelStyle}>Nro. de matrícula *</label><input value={form.nro_registro} onChange={e => setForm({ ...form, nro_registro: e.target.value })} placeholder="Ej: 12345" style={inputStyle} /></div>
-                        <div><label style={labelStyle}>Fecha de vencimiento *</label><input type="date" value={form.fecha_vencimiento} onChange={e => setForm({ ...form, fecha_vencimiento: e.target.value })} style={inputStyle} /></div>
+                        <div><label style={labelStyle}>Nro. de registro / credencial</label><input value={form.nro_registro} onChange={e => setForm({ ...form, nro_registro: e.target.value })} placeholder="Opcional" style={inputStyle} /></div>
+                        <div><label style={labelStyle}>Fecha de vencimiento</label><input type="date" value={form.fecha_vencimiento} onChange={e => setForm({ ...form, fecha_vencimiento: e.target.value })} style={inputStyle} /></div>
                       </div>
                     </div>
 
                     <div style={{ marginBottom: '20px' }}>
-                      <label style={labelStyle}>Turnos de 12h * (☀️ mañana 07–19 · 🌙 noche 19–07 · puede encadenar 24h)</label>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {DIAS_AB.map((dia, i) => {
-                          const n = i + 1;
-                          return (
-                            <div key={n} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ width: '46px', fontSize: '12px', color: '#6b7280' }}>{dia}</span>
-                              <button type="button" onClick={() => toggleTurno(n, 'DIURNO')} style={chipStyle(tieneTurno(n, 'DIURNO'))}>☀️ Mañana</button>
-                              <button type="button" onClick={() => toggleTurno(n, 'NOCTURNO')} style={chipStyle(tieneTurno(n, 'NOCTURNO'))}>🌙 Noche</button>
+                      <label style={{ ...labelStyle, marginBottom: '10px' }}>Vínculos * (cada uno 24h = 2 turnos de 12h no consecutivos · máx. 3)</label>
+                      {vinculos.map((v, idx) => {
+                        const choca = consecutivos(v.a, v.b) || igual(v.a, v.b);
+                        return (
+                          <div key={idx} style={{ border: `0.5px solid ${choca ? '#fecaca' : '#e5e7eb'}`, borderRadius: '10px', padding: '14px', marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>Vínculo {idx + 1} <span style={{ color: '#9ca3af', fontWeight: 400 }}>· 24h</span></span>
+                              {vinculos.length > 1 && <button onClick={() => quitarVinculo(idx)} style={{ background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '12px' }}>Quitar</button>}
                             </div>
-                          );
-                        })}
-                      </div>
+                            {(['a', 'b'] as const).map((slot, s) => (
+                              <div key={slot} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: s === 0 ? '8px' : 0 }}>
+                                <span style={{ width: '58px', fontSize: '12px', color: '#6b7280' }}>Turno {s + 1}</span>
+                                <select value={v[slot].dia_semana} onChange={e => setSlot(idx, slot, 'dia_semana', e.target.value)} style={sel}>
+                                  {DIAS.map((d, i) => <option key={i + 1} value={i + 1}>{d}</option>)}
+                                </select>
+                                <select value={v[slot].turno} onChange={e => setSlot(idx, slot, 'turno', e.target.value)} style={sel}>
+                                  <option value="DIURNO">☀️ Mañana</option>
+                                  <option value="NOCTURNO">🌙 Noche</option>
+                                </select>
+                              </div>
+                            ))}
+                            {choca && <div style={{ fontSize: '11px', color: '#dc2626', marginTop: '8px' }}>⚠️ Turnos consecutivos o iguales.</div>}
+                          </div>
+                        );
+                      })}
+                      {vinculos.length < 3 && (
+                        <button onClick={agregarVinculo} style={{ background: 'transparent', border: '0.5px dashed #cbd5e1', color: '#0a2540', padding: '9px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', width: '100%' }}>
+                          + Agregar vínculo
+                        </button>
+                      )}
                     </div>
 
                     <div style={{ marginBottom: '20px' }}>
@@ -462,7 +502,7 @@ export default function MedicosPage() {
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                       <button onClick={cerrarModal} style={{ padding: '9px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cancelar</button>
                       <button onClick={handleGuardar} disabled={guardando} style={{ padding: '9px 18px', borderRadius: '7px', border: 'none', background: '#0a2540', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                        {guardando ? 'Guardando...' : 'Registrar médico'}
+                        {guardando ? 'Guardando...' : 'Registrar ARM'}
                       </button>
                     </div>
                   </>
@@ -483,10 +523,10 @@ export default function MedicosPage() {
       {modalImportAbierto && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'white', borderRadius: '12px', padding: '28px', width: '580px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', margin: '0 0 20px' }}>Importar médicos desde Excel</h2>
+            <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', margin: '0 0 20px' }}>Importar ARM desde Excel</h2>
             <div style={{ background: '#f8f9fb', borderRadius: '8px', padding: '16px', marginBottom: '20px', border: '0.5px solid #e5e7eb' }}>
               <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '6px' }}>Paso 1 — Descargá la plantilla</div>
-              <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>Trae una hoja de <strong>Instrucciones</strong>. Los turnos van como <code>1D,1N,4D</code> (día 1-7 + D mañana / N noche).</div>
+              <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>Vínculos como <code>1D+3D;2N+5D</code> (<code>;</code> separa vínculos, <code>+</code> une los 2 turnos de 12h).</div>
               <button onClick={descargarPlantilla} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '8px 16px', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}>📄 Descargar plantilla Excel</button>
             </div>
             <div style={{ marginBottom: '20px' }}>
@@ -495,14 +535,14 @@ export default function MedicosPage() {
               <button onClick={() => fileRef.current?.click()} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '8px 16px', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}>📁 Seleccionar archivo</button>
               {archivoData.length > 0 && (
                 <div style={{ marginTop: '10px', background: '#f0fdf4', border: '0.5px solid #bbf7d0', borderRadius: '7px', padding: '10px 14px', fontSize: '13px', color: '#15803d' }}>
-                  ✅ {archivoData.length} médico(s) encontrados en el archivo
+                  ✅ {archivoData.length} ARM encontrados en el archivo
                 </div>
               )}
             </div>
             {resultadoImport && (
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ background: '#f0fdf4', border: '0.5px solid #bbf7d0', borderRadius: '8px', padding: '14px', marginBottom: '10px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 500, color: '#15803d' }}>✅ {resultadoImport.creados} médico(s) creados correctamente</div>
+                  <div style={{ fontSize: '14px', fontWeight: 500, color: '#15803d' }}>✅ {resultadoImport.creados} ARM creados correctamente</div>
                 </div>
                 {resultadoImport.errores.length > 0 && (
                   <div style={{ background: '#fef2f2', border: '0.5px solid #fecaca', borderRadius: '8px', padding: '14px' }}>
@@ -518,7 +558,7 @@ export default function MedicosPage() {
               <button onClick={() => { setModalImportAbierto(false); setArchivoData([]); setResultadoImport(null); }} style={{ padding: '9px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cerrar</button>
               {archivoData.length > 0 && !resultadoImport && (
                 <button onClick={handleImportar} disabled={importando} style={{ padding: '9px 18px', borderRadius: '7px', border: 'none', background: '#0a2540', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                  {importando ? 'Importando...' : `Importar ${archivoData.length} médicos`}
+                  {importando ? 'Importando...' : `Importar ${archivoData.length} ARM`}
                 </button>
               )}
             </div>
@@ -556,21 +596,21 @@ export default function MedicosPage() {
 
       {modalEstadosAbierto && seleccionado && (
         <ModalEstadosTemporales usuarioId={seleccionado.usuario.id} nombre={getNombre(seleccionado)}
-          companeros={medicos.map(m => ({ id: m.usuario.id, nombre: getNombre(m) }))}
+          companeros={arms.map(a => ({ id: a.usuario.id, nombre: getNombre(a) }))}
           onCerrar={() => { setModalEstadosAbierto(false); cargar(); }} />
       )}
       {modalPasswordAbierto && seleccionado && (
         <ModalResetearPassword usuarioId={seleccionado.usuario.id} nombre={getNombre(seleccionado)} documento={seleccionado.usuario.persona.nro_documento}
           onCerrar={() => setModalPasswordAbierto(false)} />
       )}
-      {modalTurnosAbierto && seleccionado && (
-        <ModalTurnosMedico habilitadoId={seleccionado.id} nombre={getNombre(seleccionado)}
-          turnosActuales={seleccionado.usuario.turno_regulacion.map(t => ({ dia_semana: t.dia_semana, turno: t.turno }))}
-          onCerrar={() => setModalTurnosAbierto(false)} onGuardado={cargar} />
+      {modalVinculosAbierto && seleccionado && (
+        <ModalVinculosArm habilitadoId={seleccionado.id} nombre={getNombre(seleccionado)}
+          vinculosActuales={vinculosDe(seleccionado.usuario.turno_regulacion).map(([, ts]) => ts.map(t => ({ dia_semana: t.dia_semana, turno: t.turno })))}
+          onCerrar={() => setModalVinculosAbierto(false)} onGuardado={cargar} />
       )}
       {modalEditarAbierto && seleccionado && (
-        <ModalEditarFuncionario recurso="medicos" habilitadoId={seleccionado.id} nombre={getNombre(seleccionado)}
-          contactos={seleccionado.usuario.persona.contacto} nroRegistro={seleccionado.nro_registro} fechaVencimiento={seleccionado.fecha_vencimiento}
+        <ModalEditarFuncionario recurso="arm" habilitadoId={seleccionado.id} nombre={getNombre(seleccionado)}
+          contactos={seleccionado.usuario.persona.contacto} nroRegistro={seleccionado.nro_registro ?? ''} fechaVencimiento={seleccionado.fecha_vencimiento ?? ''}
           onCerrar={() => setModalEditarAbierto(false)} onGuardado={cargar} />
       )}
     </div>
