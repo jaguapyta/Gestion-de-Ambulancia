@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+
+# Builds y caché de Next.js
+.next/
+out/
+build/
+dist/
+
+# Variables de entorno — CONTIENEN CREDENCIALES, nunca subir
+.env
+.env.*
+!.env.example
+
+# Respaldos de base de datos (todos los datos)
+backup_*.sql
+*.dump
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Sistema operativo / editores
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# Copia manual vieja del frontend (git ya es tu respaldo)
+/frontend-backup/
