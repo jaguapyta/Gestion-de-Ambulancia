@@ -526,6 +526,8 @@ model usuario {
   medico_habilitado_usuario     medico_habilitado[]  @relation("medico_usuario")
   medico_habilitado_habilitador medico_habilitado[]  @relation("medico_habilitador")
   arm_habilitado_usuario        arm_habilitado[]     @relation("arm_usuario")
+    supervisor_habilitado_usuario     supervisor_habilitado[] @relation("supervisor_usuario")
+  supervisor_habilitado_habilitador supervisor_habilitado[] @relation("supervisor_habilitador")
   arm_habilitado_habilitador    arm_habilitado[]     @relation("arm_habilitador")
   turno_regulacion              turno_regulacion[]
   prioridad_log                                             prioridad_log[]
@@ -1104,4 +1106,18 @@ model turno_regulacion {
   usuario    usuario  @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_tr_usuario")
 
   @@index([usuario_id], map: "fk_tr_usuario")
+}
+
+model supervisor_habilitado {
+  id                 Int       @id @default(autoincrement())
+  usuario_id         Int       @unique
+  nro_registro       String?   @db.VarChar(30)
+  fecha_vencimiento  DateTime? @db.Date
+  habilitado_por     Int
+  fecha_habilitacion DateTime  @db.Date
+  activo             Boolean   @default(true)
+  created_at         DateTime  @default(now()) @db.DateTime(0)
+  updated_at         DateTime  @default(now()) @db.DateTime(0)
+  usuario            usuario   @relation("supervisor_usuario", fields: [usuario_id], references: [id])
+  habilitador        usuario   @relation("supervisor_habilitador", fields: [habilitado_por], references: [id])
 }

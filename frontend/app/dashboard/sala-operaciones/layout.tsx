@@ -1,24 +1,30 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import ProtectedRoute from '../../components/ProtectedRoute';
 import { RRHH_REGULACION } from '../../../lib/permisos';
 
-// Por ahora el Centro de Regulación arranca con Recursos Humanos. Cuando se
-// sumen Recepción de solicitudes / Despacho, se agregan como grupos nuevos.
+// roles opcional por ítem: si está, solo esos roles ven el ítem.
 const grupos = [
   {
     titulo: 'Recursos Humanos',
     items: [
       { href: '/dashboard/sala-operaciones/recursos-humanos/medicos', label: 'Médicos reguladores', icon: '🩺' },
       { href: '/dashboard/sala-operaciones/recursos-humanos/arm', label: 'ARM', icon: '📻' },
+      { href: '/dashboard/sala-operaciones/recursos-humanos/supervisores', label: 'Supervisores', icon: '🎖️', roles: ['ADMINISTRADOR', 'COORDINADOR_REGULACION'] },
     ],
   },
 ];
 
 export default function SalaOperacionesLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [rol, setRol] = useState('');
+
+  useEffect(() => {
+    try { setRol(JSON.parse(localStorage.getItem('usuario') ?? '{}').rol ?? ''); } catch { }
+  }, []);
 
   return (
     <ProtectedRoute rolesPermitidos={[...RRHH_REGULACION]}>
@@ -37,7 +43,7 @@ export default function SalaOperacionesLayout({ children }: { children: React.Re
               <div style={{ fontSize: '10px', color: '#c0c4cc', padding: '4px 10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 {g.titulo}
               </div>
-              {g.items.map(item => {
+              {g.items.filter(item => !item.roles || item.roles.includes(rol)).map(item => {
                 const active = pathname === item.href;
                 return (
                   <Link key={item.href} href={item.href} style={{

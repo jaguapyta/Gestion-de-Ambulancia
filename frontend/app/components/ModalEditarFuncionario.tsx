@@ -10,8 +10,7 @@ interface Contacto {
 }
 
 interface Props {
-    recurso: 'paramedicos' | 'conductores' | 'medicos' | 'arm';
-  habilitadoId: number;
+  recurso: 'paramedicos' | 'conductores' | 'medicos' | 'arm' | 'supervisores';
   nombre: string;
   contactos: Contacto[];
   // Datos profesionales actuales

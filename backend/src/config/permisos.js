@@ -50,6 +50,7 @@ module.exports = {
   // Personal del Centro de Regulación
   LEER_MEDICOS: [ADMIN, COORD_REGULACION, SUPERVISOR],
   LEER_ARM:     [ADMIN, COORD_REGULACION, SUPERVISOR],
+  LEER_SUPERVISORES: [ADMIN, COORD_REGULACION],
 
   // Guardias: las arma Coordinación Operativa, las consulta el Centro de Regulación
   LEER_GUARDIAS: [ADMIN, COORD_OPERATIVO, COORD_REGULACION, SUPERVISOR],

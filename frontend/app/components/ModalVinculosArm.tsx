@@ -6,6 +6,7 @@ interface Turno { dia_semana: number; turno: 'DIURNO' | 'NOCTURNO'; }
 interface Vinculo { a: Turno; b: Turno; }
 
 interface Props {
+  recurso?: 'arm' | 'supervisores';
   habilitadoId: number;
   nombre: string;
   vinculosActuales: { dia_semana: number; turno: string }[][];
@@ -19,7 +20,7 @@ const franja = (t: Turno) => (t.dia_semana - 1) * 2 + (t.turno === 'NOCTURNO' ? 
 const consecutivos = (a: Turno, b: Turno) => { const d = Math.abs(franja(a) - franja(b)); return d === 1 || d === 13; };
 const igual = (a: Turno, b: Turno) => a.dia_semana === b.dia_semana && a.turno === b.turno;
 
-export default function ModalVinculosArm({ habilitadoId, nombre, vinculosActuales, onCerrar, onGuardado }: Props) {
+export default function ModalVinculosArm({ recurso = 'arm', habilitadoId, nombre, vinculosActuales, onCerrar, onGuardado }: Props) {
   const inicial: Vinculo[] = vinculosActuales
     .filter(v => v.length === 2)
     .map(v => ({
