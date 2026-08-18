@@ -349,6 +349,6 @@ const crearArmMasivo = async (req, res) => {
 };
 
 module.exports = {
-  getArms, crearArm, agregarContacto, editarContacto, eliminarContacto,
+  getArms, crearArm, crearArmMasivo, agregarContacto, editarContacto, eliminarContacto,
   actualizarRegistro, actualizarVinculos, toggleActivo
 };
