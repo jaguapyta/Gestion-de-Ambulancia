@@ -36,6 +36,7 @@ model condicion_paciente {
   nombre               String                 @unique(map: "nombre") @db.VarChar(20)
   activo               Boolean                @default(true)
   ref_cama_reiteracion ref_cama_reiteracion[]
+  ref_cama_clinica     ref_cama_clinica[]
 }
 
 model emergencia_accidente {
@@ -143,14 +144,22 @@ model ref_cama_clinica {
   laboratorio                                             String?       @db.Text
   imagenes                                                String?       @db.Text
   otros_datos                                             String?       @db.Text
+  en_uti                  Boolean       @default(false)     // ¿internado en UTI? (Q28)
+  tratamiento             String?       @db.Text            // tratamiento recibido (Q39)
+  tipo_requerimiento_id   Int?          @db.UnsignedTinyInt // tipo de sala/cama requerida (Q27/Q29)
+  condicion_id            Int?          @db.UnsignedTinyInt // ESTABLE / INESTABLE (Q38)
   hospital_ref_cama_clinica_hospital_destino_idTohospital hospital?     @relation("ref_cama_clinica_hospital_destino_idTohospital", fields: [hospital_destino_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_rcc_destino")
   hospital_ref_cama_clinica_hospital_origen_idTohospital  hospital?     @relation("ref_cama_clinica_hospital_origen_idTohospital", fields: [hospital_origen_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_rcc_origen")
   solicitud                                               solicitud     @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_rcc_solicitud")
   tipo_paciente                                           tipo_paciente @relation(fields: [tipo_paciente_id], references: [id], onUpdate: Restrict, map: "fk_rcc_tipo_paciente")
+  tipo_requerimiento_cama                                 tipo_requerimiento_cama? @relation(fields: [tipo_requerimiento_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_rcc_requerimiento")
+  condicion_paciente                                      condicion_paciente?      @relation(fields: [condicion_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_rcc_condicion")
 
   @@index([tipo_paciente_id], map: "fk_rcc_tipo_paciente")
   @@index([hospital_destino_id], map: "fk_rcc_destino")
   @@index([hospital_origen_id], map: "fk_rcc_origen")
+  @@index([tipo_requerimiento_id], map: "fk_rcc_requerimiento")
+  @@index([condicion_id], map: "fk_rcc_condicion")
 }
 
 model ref_cama_obstetrica {
@@ -276,12 +285,12 @@ model signos_vitales {
 model solicitud {
   id                      Int                       @id @default(autoincrement())
   tipo_solicitud_id       Int                       @db.UnsignedTinyInt
-  tipo_servicio_id        Int                       @db.UnsignedTinyInt
+  tipo_servicio_id        Int?                      @db.UnsignedTinyInt
   estado_solicitud_id     Int                       @default(1) @db.UnsignedTinyInt
   canal_ingreso_id        Int                       @db.UnsignedTinyInt
   recepcionista_id        Int
   denunciante_nombre      String?                   @db.VarChar(200)
-  denunciante_telefono    String                    @db.VarChar(20)
+  denunciante_telefono    String?                    @db.VarChar(20)
   direccion               String?                   @db.VarChar(255)
   nro_casa                String?                   @db.VarChar(10)
   ciudad                  String?                   @db.VarChar(100)
@@ -293,6 +302,7 @@ model solicitud {
   paciente_apellido       String?                   @db.VarChar(100)
   paciente_documento      String?                   @db.VarChar(20)
   paciente_edad           String?                   @db.VarChar(20)
+  paciente_edad_unidad    String?                   @db.VarChar(15)
   paciente_sexo           String?                   @db.Char(1)
   es_nn                   Boolean                   @default(false)
   observacion             String?                   @db.Text
@@ -315,7 +325,7 @@ model solicitud {
   estado_solicitud        estado_solicitud          @relation(fields: [estado_solicitud_id], references: [id], onUpdate: Restrict, map: "fk_sol_estado")
   persona                 persona?                  @relation(fields: [persona_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_sol_persona")
   usuario                 usuario                   @relation(fields: [recepcionista_id], references: [id], onUpdate: Restrict, map: "fk_sol_recepcionista")
-  tipo_servicio           tipo_servicio             @relation(fields: [tipo_servicio_id], references: [id], onUpdate: Restrict, map: "fk_sol_tipo_servicio")
+  tipo_servicio           tipo_servicio?            @relation(fields: [tipo_servicio_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_sol_tipo_servicio")
   tipo_solicitud          tipo_solicitud            @relation(fields: [tipo_solicitud_id], references: [id], onUpdate: Restrict, map: "fk_sol_tipo_solicitud")
   solicitud_emergencia    solicitud_emergencia?
   solicitud_ref_cama      solicitud_ref_cama?
@@ -438,6 +448,7 @@ model tipo_requerimiento_cama {
   nombre               String                 @unique(map: "nombre") @db.VarChar(50)
   activo               Boolean                @default(true)
   ref_cama_reiteracion ref_cama_reiteracion[]
+  ref_cama_clinica     ref_cama_clinica[]
 }
 
 model tipo_servicio {

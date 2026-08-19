@@ -15,6 +15,8 @@ const COORD_TRANSPORTE = 'COORDINADOR_TRANSPORTE';
 const COORD_REGULACION = 'COORDINADOR_REGULACION';
 const SUPERVISOR = 'SUPERVISOR_GUARDIA';
 const ASISTENTE_TRANSPORTE = 'ASISTENTE_TRANSPORTE';
+const ARM = 'ARM';
+const MEDICO_REGULADOR = 'MEDICO_REGULADOR';
 
 // Potestad: qué rol puede administrar el legajo de qué tipo de funcionario.
 // Cada área gestiona su propio personal; dentro del Centro de Regulación
@@ -60,6 +62,10 @@ module.exports = {
 
   // Estados temporales: toda jefatura que gestione personal
   LEER_ESTADOS: [ADMIN, COORD_OPERATIVO, COORD_TRANSPORTE, COORD_REGULACION, SUPERVISOR],
+
+    // Centro de Regulación — operación (recepción y gestión de solicitudes)
+  LEER_SOLICITUDES:      [ADMIN, COORD_REGULACION, SUPERVISOR, ARM, MEDICO_REGULADOR],
+  GESTIONAR_SOLICITUDES: [ADMIN, COORD_REGULACION, SUPERVISOR, ARM, MEDICO_REGULADOR],
 
   // Búsqueda de personas por documento: la usan los tres formularios de alta de personal
   BUSCAR_PERSONA: [ADMIN, COORD_OPERATIVO, COORD_TRANSPORTE, COORD_REGULACION, SUPERVISOR],

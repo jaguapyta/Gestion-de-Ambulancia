@@ -17,3 +17,5 @@ export const puedeVer = (seccion: Seccion, rol?: string) =>
 // Submenú de Recursos Humanos del Centro de Regulación: solo las jefaturas.
 // Más estricto que ACCESO['sala-operaciones'] (que incluye ARM y médicos).
 export const RRHH_REGULACION = ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA'] as const;
+// Operación del Centro de Regulación: incluye a ARM y médico regulador (que NO ven RRHH)
+export const OPERACION_REGULACION = ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA', 'ARM', 'MEDICO_REGULADOR'] as const;
