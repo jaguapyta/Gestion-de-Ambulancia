@@ -92,6 +92,8 @@ model inotripicos {
   solicitud_id       Int
   tipo_inotripico_id Int             @db.UnsignedTinyInt
   usuario_id         Int
+  dosis              String?         @db.VarChar(100)
+  goteo              String?         @db.VarChar(100)
   created_at         DateTime        @default(now()) @db.DateTime(0)
   solicitud          solicitud       @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_in_solicitud")
   tipo_inotripico    tipo_inotripico @relation(fields: [tipo_inotripico_id], references: [id], onUpdate: Restrict, map: "fk_in_tipo_inotripico")
@@ -424,6 +426,7 @@ model tipo_inotripico {
 model tipo_oxigeno {
   id                      Int                       @id @default(autoincrement()) @db.UnsignedTinyInt
   nombre                  String                    @unique(map: "nombre") @db.VarChar(50)
+  usa_flujo               Boolean                   @default(false)
   activo                  Boolean                   @default(true)
   signos_vitales          signos_vitales[]
   traslado_requerimientos traslado_requerimientos[]

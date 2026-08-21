@@ -22,6 +22,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/solicitudes', require('./routes/solicitudes.routes'));
 app.use('/api/camas', require('./routes/camas.routes'));
+app.use('/api/traslados', require('./routes/traslados.routes'));
 app.use('/api/ambulancias', require('./routes/ambulancias.routes'));
 app.use('/api/despacho', require('./routes/despacho.routes'));
 app.use('/api/usuarios', require('./routes/usuarios.routes'));

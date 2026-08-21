@@ -1,24 +1,33 @@
 const prisma = require('../config/db');
 
-const TIPO_REF_CAMA = 3;   // tipo_solicitud REF_CAMA / PED_CAMA
+const TIPO_REF_CAMA = 3;   // tipo_solicitud PED_CAMA
 const ESTADO_PENDIENTE = 1;
+const ESTADOS_CERRADOS = [7, 8, 9, 10, 11]; // FINALIZADA, CERRADA, CANCELADA, FALSA_ALARMA, NO_CONFIRMADA
 
 const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
 const int = (v) => { const n = parseInt(v); return isNaN(n) ? null : n; };
 
-// Catálogos que necesita el formulario de camas
+const canalTelefonoId = async () => {
+  const c = await prisma.canal_ingreso.findFirst({ where: { nombre: 'TELEFONO' } });
+  return c?.id ?? 1;
+};
+const nombreUsuario = async (id) => {
+  const u = await prisma.usuario.findUnique({ where: { id }, include: { persona: true } });
+  return u?.persona ? `${u.persona.primer_nombre} ${u.persona.primer_apellido}`.trim() : `Usuario #${id}`;
+};
+
+// Catálogos del formulario de camas
 const getCatalogos = async (req, res) => {
   try {
-    const [tipos_paciente, tipos_requerimiento, condiciones, tipos_oxigeno, tipos_inotropico, canales, hospitales] = await Promise.all([
+    const [tipos_paciente, tipos_requerimiento, condiciones, tipos_oxigeno, tipos_inotropico, centros] = await Promise.all([
       prisma.tipo_paciente.findMany({ where: { activo: true }, orderBy: { id: 'asc' } }),
       prisma.tipo_requerimiento_cama.findMany({ where: { activo: true }, orderBy: { id: 'asc' } }),
       prisma.condicion_paciente.findMany({ where: { activo: true }, orderBy: { id: 'asc' } }),
       prisma.tipo_oxigeno.findMany({ where: { activo: true }, orderBy: { id: 'asc' } }),
       prisma.tipo_inotripico.findMany({ where: { activo: true }, orderBy: { id: 'asc' } }),
-      prisma.canal_ingreso.findMany({ where: { activo: true }, orderBy: { id: 'asc' } }),
       prisma.hospital.findMany({ where: { activo: true }, orderBy: { nombre: 'asc' } }),
     ]);
-    res.json({ tipos_paciente, tipos_requerimiento, condiciones, tipos_oxigeno, tipos_inotropico, canales, hospitales });
+    res.json({ tipos_paciente, tipos_requerimiento, condiciones, tipos_oxigeno, tipos_inotropico, centros });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener catálogos' });
@@ -26,28 +35,27 @@ const getCatalogos = async (req, res) => {
 };
 
 // Historial de pedidos de cama de un paciente (por cédula).
-// Sirve para: 1) decidir en recepción si es NUEVO o REITERACIÓN, y 2) la línea de tiempo del médico.
+// ?abierto=1 → solo pedidos NO cerrados (para decidir NUEVO vs REITERACIÓN en recepción).
 const getHistorialPaciente = async (req, res) => {
   const { documento } = req.params;
+  const soloAbiertos = req.query.abierto === '1';
   try {
     const pedidos = await prisma.solicitud.findMany({
-      where: { tipo_solicitud_id: TIPO_REF_CAMA, paciente_documento: documento },
+      where: {
+        tipo_solicitud_id: TIPO_REF_CAMA,
+        paciente_documento: documento,
+        ...(soloAbiertos ? { estado_solicitud_id: { notIn: ESTADOS_CERRADOS } } : {}),
+      },
       include: {
-        estado_solicitud: true,
-        canal_ingreso: true,
-        usuario: { include: { persona: true } },
+        estado_solicitud: true, canal_ingreso: true, usuario: { include: { persona: true } },
         solicitud_ref_cama: true,
         ref_cama_clinica: { include: { tipo_paciente: true, tipo_requerimiento_cama: true, condicion_paciente: true } },
         ref_cama_obstetrica: true,
-        ref_cama_reiteracion: {
-          include: { tipo_requerimiento_cama: true, condicion_paciente: true, usuario: { include: { persona: true } } },
-          orderBy: { created_at: 'asc' },
-        },
+        ref_cama_reiteracion: { include: { tipo_requerimiento_cama: true, condicion_paciente: true, usuario: { include: { persona: true } } }, orderBy: { created_at: 'asc' } },
         signos_vitales: { include: { tipo_oxigeno: true }, orderBy: { created_at: 'asc' } },
       },
       orderBy: { created_at: 'asc' },
     });
-    // El pedido "original" (con datos completos) es el NUEVO; de ahí se heredan los datos generales.
     const original = pedidos.find((p) => p.solicitud_ref_cama?.tipo_pedido === 'NUEVO') ?? pedidos[0] ?? null;
     res.json({ existe: pedidos.length > 0, original, pedidos });
   } catch (err) {
@@ -56,41 +64,44 @@ const getHistorialPaciente = async (req, res) => {
   }
 };
 
-// Alta de un pedido de cama. Maneja NUEVO (todos los datos) y REITERACIÓN (solo variaciones).
 const crearPedidoCama = async (req, res) => {
   const b = req.body;
   const esReiteracion = b.tipo_pedido === 'REITERACION';
   try {
-    if (!b.canal_ingreso_id) return res.status(400).json({ error: 'Falta el canal de ingreso' });
-    if (!b.centro_solicitante || !b.profesional_nombre || !b.especialidad || !b.telefono_contacto || !b.operador_medico) {
-      return res.status(400).json({ error: 'Faltan datos del solicitante (centro, profesional, especialidad, teléfono, operador)' });
+    if (!b.centro_solicitante || !b.profesional_nombre || !b.especialidad || !b.telefono_contacto) {
+      return res.status(400).json({ error: 'Faltan datos del solicitante (centro, profesional, especialidad, teléfono)' });
     }
+    const canalId = await canalTelefonoId();
+    const operador = await nombreUsuario(req.usuario.id); // automático e inmodificable
+
+    // Inotrópicos con dosis / goteo por cada uno
+    const inotroRows = Array.isArray(b.inotropicos)
+      ? b.inotropicos.map((x) => (typeof x === 'object'
+          ? { tipo_inotripico_id: int(x.tipo_inotripico_id), dosis: x.dosis || null, goteo: x.goteo || null }
+          : { tipo_inotripico_id: int(x), dosis: null, goteo: null })).filter((x) => x.tipo_inotripico_id)
+      : [];
+
+    const s = b.signos ?? {};
+    const haySignos = s.presion_arterial || s.frecuencia_cardiaca || s.frecuencia_respiratoria || s.temperatura || s.glasgow || s.saturacion;
 
     // ---------- REITERACIÓN ----------
     if (esReiteracion) {
       if (!b.paciente_documento) return res.status(400).json({ error: 'Falta la cédula del paciente para la reiteración' });
-      if (!b.tipo_requerimiento_id || !b.condicion_id) {
-        return res.status(400).json({ error: 'La reiteración requiere el requerimiento y la condición del paciente' });
-      }
+      if (!b.tipo_requerimiento_id || !b.condicion_id) return res.status(400).json({ error: 'La reiteración requiere el requerimiento y la condición' });
 
       const previos = await prisma.solicitud.findMany({
-        where: { tipo_solicitud_id: TIPO_REF_CAMA, paciente_documento: b.paciente_documento },
-        include: { solicitud_ref_cama: true },
-        orderBy: { created_at: 'asc' },
+        where: { tipo_solicitud_id: TIPO_REF_CAMA, paciente_documento: b.paciente_documento, estado_solicitud_id: { notIn: ESTADOS_CERRADOS } },
+        include: { solicitud_ref_cama: true }, orderBy: { created_at: 'asc' },
       });
-      if (previos.length === 0) {
-        return res.status(400).json({ error: 'No hay un pedido previo para esa cédula. Cargalo como NUEVO.' });
-      }
+      if (previos.length === 0) return res.status(400).json({ error: 'No hay un pedido abierto para esa cédula. Cargalo como NUEVO.' });
       const original = previos.find((p) => p.solicitud_ref_cama?.tipo_pedido === 'NUEVO') ?? previos[0];
       const nroReit = previos.filter((p) => p.solicitud_ref_cama?.tipo_pedido === 'REITERACION').length + 1;
 
       const creada = await prisma.$transaction(async (tx) => {
-        // Los datos generales del paciente se HEREDAN del pedido original (no se re-cargan)
         const solicitud = await tx.solicitud.create({
           data: {
-            tipo_solicitud_id: TIPO_REF_CAMA, tipo_servicio_id: null,
-            canal_ingreso_id: int(b.canal_ingreso_id), estado_solicitud_id: ESTADO_PENDIENTE,
-            recepcionista_id: req.usuario.id, denunciante_telefono: b.telefono_contacto ?? null,
+            tipo_solicitud_id: TIPO_REF_CAMA, tipo_servicio_id: null, canal_ingreso_id: canalId,
+            estado_solicitud_id: ESTADO_PENDIENTE, recepcionista_id: req.usuario.id, denunciante_telefono: b.telefono_contacto ?? null,
             persona_id: original.persona_id,
             paciente_nombre: original.paciente_nombre, paciente_apellido: original.paciente_apellido,
             paciente_documento: original.paciente_documento, paciente_edad: original.paciente_edad,
@@ -100,38 +111,21 @@ const crearPedidoCama = async (req, res) => {
         });
         await tx.solicitud_ref_cama.create({
           data: {
-            solicitud_id: solicitud.id, tipo_pedido: 'REITERACION',
-            nro_pedido_anterior: original.solicitud_ref_cama?.id ?? null,
+            solicitud_id: solicitud.id, tipo_pedido: 'REITERACION', nro_pedido_anterior: original.solicitud_ref_cama?.id ?? null,
             centro_solicitante: b.centro_solicitante, profesional_nombre: b.profesional_nombre,
-            especialidad: b.especialidad, telefono_contacto: b.telefono_contacto, operador_medico: b.operador_medico,
+            especialidad: b.especialidad, telefono_contacto: b.telefono_contacto, operador_medico: operador,
           },
         });
-        // Solo lo que varía: requerimiento / condición / UTI / tratamiento
         await tx.ref_cama_reiteracion.create({
           data: {
             solicitud_id: solicitud.id, nro_reiteracion: nroReit,
             tipo_requerimiento_id: int(b.tipo_requerimiento_id), condicion_id: int(b.condicion_id),
-            en_uti: b.en_uti ?? false, tratamiento: b.tratamiento ?? null,
-            observacion: b.observacion ?? null, usuario_id: req.usuario.id,
+            en_uti: b.en_uti ?? false, tratamiento: b.tratamiento ?? null, observacion: b.observacion ?? null, usuario_id: req.usuario.id,
           },
         });
-        // Signos vitales nuevos
-        const s = b.signos;
-        if (s && (s.presion_arterial || s.frecuencia_cardiaca || s.frecuencia_respiratoria || s.temperatura || s.glasgow || s.saturacion)) {
-          await tx.signos_vitales.create({
-            data: {
-              solicitud_id: solicitud.id,
-              presion_arterial: s.presion_arterial ?? null, frecuencia_cardiaca: s.frecuencia_cardiaca ?? null,
-              frecuencia_respiratoria: s.frecuencia_respiratoria ?? null, temperatura: num(s.temperatura),
-              glasgow: s.glasgow ? int(s.glasgow) : null, saturacion: s.saturacion ?? null,
-              tipo_oxigeno_id: s.tipo_oxigeno_id ? int(s.tipo_oxigeno_id) : null, oxigeno_flujo: num(s.oxigeno_flujo),
-              usuario_id: req.usuario.id,
-            },
-          });
-        }
-        await tx.historial_solicitud.create({
-          data: { solicitud_id: solicitud.id, estado_nuevo_id: ESTADO_PENDIENTE, usuario_id: req.usuario.id, observacion: `Reiteración #${nroReit} recepcionada` },
-        });
+        if (haySignos) await tx.signos_vitales.create({ data: signosData(s, solicitud.id, req.usuario.id) });
+        if (inotroRows.length) await tx.inotripicos.createMany({ data: inotroRows.map((r) => ({ solicitud_id: solicitud.id, usuario_id: req.usuario.id, ...r })) });
+        await tx.historial_solicitud.create({ data: { solicitud_id: solicitud.id, estado_nuevo_id: ESTADO_PENDIENTE, usuario_id: req.usuario.id, observacion: `Reiteración #${nroReit} recepcionada` } });
         return solicitud;
       });
       return res.status(201).json({ ...creada, tipo_pedido: 'REITERACION' });
@@ -144,9 +138,8 @@ const crearPedidoCama = async (req, res) => {
     const creada = await prisma.$transaction(async (tx) => {
       const solicitud = await tx.solicitud.create({
         data: {
-          tipo_solicitud_id: TIPO_REF_CAMA, tipo_servicio_id: null,
-          canal_ingreso_id: int(b.canal_ingreso_id), estado_solicitud_id: ESTADO_PENDIENTE,
-          recepcionista_id: req.usuario.id, denunciante_telefono: b.telefono_contacto ?? null,
+          tipo_solicitud_id: TIPO_REF_CAMA, tipo_servicio_id: null, canal_ingreso_id: canalId,
+          estado_solicitud_id: ESTADO_PENDIENTE, recepcionista_id: req.usuario.id, denunciante_telefono: b.telefono_contacto ?? null,
           persona_id: b.persona_id ? int(b.persona_id) : null,
           paciente_nombre: b.paciente_nombre ?? null, paciente_apellido: b.paciente_apellido ?? null,
           paciente_documento: b.paciente_documento ?? null, paciente_edad: b.paciente_edad ?? null,
@@ -158,7 +151,7 @@ const crearPedidoCama = async (req, res) => {
         data: {
           solicitud_id: solicitud.id, tipo_pedido: 'NUEVO', nro_pedido_anterior: null,
           centro_solicitante: b.centro_solicitante, profesional_nombre: b.profesional_nombre,
-          especialidad: b.especialidad, telefono_contacto: b.telefono_contacto, operador_medico: b.operador_medico,
+          especialidad: b.especialidad, telefono_contacto: b.telefono_contacto, operador_medico: operador,
         },
       });
       await tx.ref_cama_clinica.create({
@@ -171,8 +164,6 @@ const crearPedidoCama = async (req, res) => {
           en_uti: b.en_uti ?? false, tratamiento: b.tratamiento ?? null,
           tipo_requerimiento_id: b.tipo_requerimiento_id ? int(b.tipo_requerimiento_id) : null,
           condicion_id: b.condicion_id ? int(b.condicion_id) : null,
-          hospital_origen_id: b.hospital_origen_id ? int(b.hospital_origen_id) : null,
-          hospital_destino_id: b.hospital_destino_id ? int(b.hospital_destino_id) : null,
         },
       });
       const o = b.obstetrica;
@@ -186,27 +177,9 @@ const crearPedidoCama = async (req, res) => {
           },
         });
       }
-      const s = b.signos;
-      if (s && (s.presion_arterial || s.frecuencia_cardiaca || s.frecuencia_respiratoria || s.temperatura || s.glasgow || s.saturacion)) {
-        await tx.signos_vitales.create({
-          data: {
-            solicitud_id: solicitud.id,
-            presion_arterial: s.presion_arterial ?? null, frecuencia_cardiaca: s.frecuencia_cardiaca ?? null,
-            frecuencia_respiratoria: s.frecuencia_respiratoria ?? null, temperatura: num(s.temperatura),
-            glasgow: s.glasgow ? int(s.glasgow) : null, saturacion: s.saturacion ?? null,
-            tipo_oxigeno_id: s.tipo_oxigeno_id ? int(s.tipo_oxigeno_id) : null, oxigeno_flujo: num(s.oxigeno_flujo),
-            usuario_id: req.usuario.id,
-          },
-        });
-      }
-      if (Array.isArray(b.inotropicos) && b.inotropicos.length > 0) {
-        await tx.inotripicos.createMany({
-          data: b.inotropicos.map(int).filter(Boolean).map((tid) => ({ solicitud_id: solicitud.id, tipo_inotripico_id: tid, usuario_id: req.usuario.id })),
-        });
-      }
-      await tx.historial_solicitud.create({
-        data: { solicitud_id: solicitud.id, estado_nuevo_id: ESTADO_PENDIENTE, usuario_id: req.usuario.id, observacion: 'Pedido de cama recepcionado' },
-      });
+      if (haySignos) await tx.signos_vitales.create({ data: signosData(s, solicitud.id, req.usuario.id) });
+      if (inotroRows.length) await tx.inotripicos.createMany({ data: inotroRows.map((r) => ({ solicitud_id: solicitud.id, usuario_id: req.usuario.id, ...r })) });
+      await tx.historial_solicitud.create({ data: { solicitud_id: solicitud.id, estado_nuevo_id: ESTADO_PENDIENTE, usuario_id: req.usuario.id, observacion: 'Pedido de cama recepcionado' } });
       return solicitud;
     });
     res.status(201).json({ ...creada, tipo_pedido: 'NUEVO' });
@@ -215,5 +188,14 @@ const crearPedidoCama = async (req, res) => {
     res.status(500).json({ error: 'Error al crear el pedido de cama' });
   }
 };
+
+const signosData = (s, solicitud_id, usuario_id) => ({
+  solicitud_id,
+  presion_arterial: s.presion_arterial ?? null, frecuencia_cardiaca: s.frecuencia_cardiaca ?? null,
+  frecuencia_respiratoria: s.frecuencia_respiratoria ?? null, temperatura: num(s.temperatura),
+  glasgow: s.glasgow ? int(s.glasgow) : null, saturacion: s.saturacion ?? null,
+  tipo_oxigeno_id: s.tipo_oxigeno_id ? int(s.tipo_oxigeno_id) : null, oxigeno_flujo: num(s.oxigeno_flujo),
+  usuario_id,
+});
 
 module.exports = { getCatalogos, getHistorialPaciente, crearPedidoCama };

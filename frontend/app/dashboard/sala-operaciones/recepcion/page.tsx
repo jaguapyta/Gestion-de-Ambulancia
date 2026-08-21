@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import ModalPedidoCama from '../../../components/ModalPedidoCama';
+import ModalTraslado from '../../../components/ModalTraslado';
 
 interface Cat { id: number; nombre?: string; descripcion?: string; codigo?: string; }
 interface Catalogos { tipos_solicitud: Cat[]; tipos_servicio: Cat[]; canales: Cat[]; estados: Cat[]; }
@@ -22,6 +23,7 @@ interface Solicitud {
   tipo_solicitud: { nombre: string };
   tipo_servicio: { codigo: string; descripcion: string } | null;
   canal_ingreso: { nombre: string };
+  solicitud_ref_cama: { centro_solicitante: string; profesional_nombre?: string; especialidad?: string } | null;
   estado_solicitud: { id: number; nombre: string };
   usuario: { persona: { primer_nombre: string; primer_apellido: string } };
   historial_solicitud?: any[];
@@ -37,7 +39,7 @@ const estadoColor = (nombre: string) => {
 // Los tipos de pedido. Por ahora solo Camas está construido.
 const TIPOS = [
   { key: 'emergencia', label: 'Emergencia / Urgencia', icon: '🚑', activo: false },
-  { key: 'traslado', label: 'Traslado', icon: '🚐', activo: false },
+  { key: 'traslado', label: 'Traslado', icon: '🚐', activo: true },
   { key: 'camas', label: 'Solicitud de camas', icon: '🛏️', activo: true },
   { key: 'cobertura', label: 'Cobertura', icon: '🎪', activo: false },
   { key: 'dialisis', label: 'Diálisis', icon: '🩺', activo: false },
@@ -53,12 +55,12 @@ export default function RecepcionPage() {
 
   const [modalTipo, setModalTipo] = useState(false);
   const [modalCamas, setModalCamas] = useState(false);
+  const [modalTraslado, setModalTraslado] = useState(false);
+  const [callTel, setCallTel] = useState('');
+  const [callNombre, setCallNombre] = useState('');
 
   const [detalle, setDetalle] = useState<Solicitud | null>(null);
-  const [nuevoEstado, setNuevoEstado] = useState('');
-  const [obsEstado, setObsEstado] = useState('');
   const [histCamas, setHistCamas] = useState<any>(null);
-  const [guardando, setGuardando] = useState(false);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -85,32 +87,22 @@ export default function RecepcionPage() {
   useEffect(() => { const t = setTimeout(cargar, 250); return () => clearTimeout(t); }, [filtroEstado, filtroTipo, busqueda]);
 
   const elegirTipo = (key: string, activo: boolean) => {
-    if (!activo) return;
+    if (!activo || !callTel.trim()) return;
     setModalTipo(false);
     if (key === 'camas') setModalCamas(true);
+    if (key === 'traslado') setModalTraslado(true);
   };
 
   const verDetalle = async (id: number) => {
     const res = await fetch(`http://localhost:3001/api/solicitudes/${id}`, { headers: headers() });
     if (!res.ok) return;
     const d = await res.json();
-    setDetalle(d); setNuevoEstado(''); setObsEstado(''); setHistCamas(null);
+    setDetalle(d); setHistCamas(null);
     // Para pedidos de cama, traer toda la línea de tiempo del paciente (por cédula)
     if (String(d.tipo_solicitud?.nombre ?? '').includes('CAMA') && d.paciente_documento) {
       const rh = await fetch(`http://localhost:3001/api/camas/paciente/${encodeURIComponent(d.paciente_documento)}`, { headers: headers() });
       if (rh.ok) setHistCamas(await rh.json());
     }
-  };
-
-  const cambiarEstado = async () => {
-    if (!detalle || !nuevoEstado) return;
-    setGuardando(true);
-    try {
-      const res = await fetch(`http://localhost:3001/api/solicitudes/${detalle.id}/estado`, {
-        method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_nuevo_id: nuevoEstado, observacion: obsEstado }),
-      });
-      if (res.ok) { await verDetalle(detalle.id); cargar(); }
-    } catch { } finally { setGuardando(false); }
   };
 
   const nombrePaciente = (s: Solicitud) =>
@@ -127,7 +119,7 @@ export default function RecepcionPage() {
           <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Recepción de solicitudes</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Centro de Regulación · ingreso y seguimiento de pedidos</p>
         </div>
-        <button onClick={() => setModalTipo(true)}
+        <button onClick={() => { setCallTel(''); setCallNombre(''); setModalTipo(true); }}
           style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
           + Nueva solicitud
         </button>
@@ -164,24 +156,25 @@ export default function RecepcionPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
           <thead>
             <tr style={{ background: '#f8f9fb', borderBottom: '0.5px solid #e5e7eb' }}>
-              {['#', 'Ingreso', 'Tipo', 'Servicio', 'Canal', 'Paciente', 'Estado', 'Recepcionista', ''].map(col => (
+              {['N° Pedido', 'Ingreso', 'Tipo', 'Servicio', 'Origen', 'Canal', 'Paciente', 'Estado', 'Recepcionista', ''].map(col => (
                 <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', color: '#6b7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {cargando ? (
-              <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Cargando...</td></tr>
+              <tr><td colSpan={10} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Cargando...</td></tr>
             ) : solicitudes.length === 0 ? (
-              <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No hay solicitudes</td></tr>
+              <tr><td colSpan={10} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No hay solicitudes</td></tr>
             ) : solicitudes.map((s) => {
               const ec = estadoColor(s.estado_solicitud.nombre);
               return (
                 <tr key={s.id} style={{ borderBottom: '0.5px solid #f3f4f6' }}>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#9ca3af' }}>{s.id}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: '#0a2540' }}>#{s.id}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280', whiteSpace: 'nowrap' }}>{fmt(s.created_at)}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>{s.tipo_solicitud.nombre}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.tipo_servicio?.codigo ?? '—'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.solicitud_ref_cama?.centro_solicitante ?? ([s.direccion, s.ciudad].filter(Boolean).join(', ') || '—')}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.canal_ingreso.nombre}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0a2540' }}>{nombrePaciente(s)}</td>
                   <td style={{ padding: '12px 16px' }}>
@@ -202,24 +195,34 @@ export default function RecepcionPage() {
       {modalTipo && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'white', borderRadius: '12px', padding: '28px', width: '520px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', margin: '0 0 6px' }}>¿Qué tipo de pedido?</h2>
-            <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 18px' }}>Elegí el tipo y se abrirá el formulario correspondiente.</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {TIPOS.map(t => (
-                <button key={t.key} onClick={() => elegirTipo(t.key, t.activo)} disabled={!t.activo}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '10px',
-                    border: '0.5px solid #e5e7eb', background: t.activo ? 'white' : '#f8f9fb',
-                    cursor: t.activo ? 'pointer' : 'not-allowed', opacity: t.activo ? 1 : 0.55, textAlign: 'left',
-                  }}>
-                  <span style={{ fontSize: '26px' }}>{t.icon}</span>
-                  <span>
-                    <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>{t.label}</div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>{t.activo ? 'Disponible' : 'Próximamente'}</div>
-                  </span>
-                </button>
-              ))}
+            <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', margin: '0 0 6px' }}>Nueva solicitud</h2>
+            <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 16px' }}>Registrá quién llama y elegí el tipo de pedido.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+              <div><label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '6px' }}>Teléfono *</label>
+                <input value={callTel} onChange={e => setCallTel(e.target.value)} style={input} /></div>
+              <div><label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '6px' }}>Nombre del solicitante</label>
+                <input value={callNombre} onChange={e => setCallNombre(e.target.value)} style={input} /></div>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {TIPOS.map(t => {
+                const habil = t.activo && !!callTel.trim();
+                return (
+                  <button key={t.key} onClick={() => elegirTipo(t.key, t.activo)} disabled={!habil}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '10px',
+                      border: '0.5px solid #e5e7eb', background: habil ? 'white' : '#f8f9fb',
+                      cursor: habil ? 'pointer' : 'not-allowed', opacity: habil ? 1 : 0.55, textAlign: 'left',
+                    }}>
+                    <span style={{ fontSize: '26px' }}>{t.icon}</span>
+                    <span>
+                      <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>{t.label}</div>
+                      <div style={{ fontSize: '11px', color: '#9ca3af' }}>{t.activo ? 'Disponible' : 'Próximamente'}</div>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {!callTel.trim() && <div style={{ fontSize: '12px', color: '#c2410c', marginTop: '10px' }}>Ingresá el teléfono para elegir el tipo.</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
               <button onClick={() => setModalTipo(false)} style={{ padding: '9px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cancelar</button>
             </div>
@@ -229,7 +232,12 @@ export default function RecepcionPage() {
 
       {/* Formulario de camas */}
       {modalCamas && (
-        <ModalPedidoCama onCerrar={() => setModalCamas(false)} onGuardado={cargar} />
+        <ModalPedidoCama telefono={callTel} nombre={callNombre} onCerrar={() => setModalCamas(false)} onGuardado={cargar} />
+      )}
+
+      {/* Formulario de traslado */}
+      {modalTraslado && (
+        <ModalTraslado telefono={callTel} nombre={callNombre} onCerrar={() => setModalTraslado(false)} onGuardado={cargar} />
       )}
 
       {/* Detalle + cambio de estado */}
@@ -244,6 +252,11 @@ export default function RecepcionPage() {
             <div style={{ background: '#f8f9fb', borderRadius: '8px', padding: '14px', marginBottom: '16px', fontSize: '13px', color: '#374151', lineHeight: 1.7 }}>
               <div><strong>Tipo:</strong> {detalle.tipo_solicitud.nombre}{detalle.tipo_servicio ? ` · Servicio: ${detalle.tipo_servicio.codigo} — ${detalle.tipo_servicio.descripcion}` : ''}</div>
               <div><strong>Canal:</strong> {detalle.canal_ingreso.nombre}</div>
+              {detalle.solicitud_ref_cama && (
+                <div><strong>Centro solicitante:</strong> {detalle.solicitud_ref_cama.centro_solicitante}
+                  {detalle.solicitud_ref_cama.profesional_nombre ? ` · ${detalle.solicitud_ref_cama.profesional_nombre}` : ''}
+                  {detalle.solicitud_ref_cama.especialidad ? ` (${detalle.solicitud_ref_cama.especialidad})` : ''}</div>
+              )}
               <div><strong>Contacto:</strong> {detalle.denunciante_nombre ?? '—'} · {detalle.denunciante_telefono ?? '—'}</div>
               <div><strong>Ubicación:</strong> {[detalle.direccion, detalle.ciudad].filter(Boolean).join(', ') || '—'}</div>
               <div><strong>Paciente:</strong> {nombrePaciente(detalle)} {detalle.paciente_edad ? `· ${detalle.paciente_edad}` : ''} {detalle.paciente_documento ? `· CI ${detalle.paciente_documento}` : ''}</div>
@@ -275,17 +288,6 @@ export default function RecepcionPage() {
               </div>
             )}
 
-            <div style={{ border: '0.5px solid #e5e7eb', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '10px' }}>Cambiar estado</div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <select value={nuevoEstado} onChange={e => setNuevoEstado(e.target.value)} style={{ ...input, width: '170px' }}>
-                  <option value="">Nuevo estado…</option>
-                  {catalogos.estados.filter(e => e.id !== detalle.estado_solicitud.id).map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                </select>
-                <input value={obsEstado} onChange={e => setObsEstado(e.target.value)} placeholder="Observación (opcional)" style={{ ...input, flex: 1 }} />
-                <button onClick={cambiarEstado} disabled={!nuevoEstado || guardando} style={{ padding: '9px 16px', borderRadius: '7px', border: 'none', background: nuevoEstado ? '#0a2540' : '#9ca3af', color: 'white', cursor: nuevoEstado ? 'pointer' : 'default', fontSize: '13px', whiteSpace: 'nowrap' }}>Aplicar</button>
-              </div>
-            </div>
 
             <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '10px' }}>Historial</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>

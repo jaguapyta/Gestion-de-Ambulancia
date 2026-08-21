@@ -39,6 +39,7 @@ const getSolicitudes = async (req, res) => {
         canal_ingreso: true,
         estado_solicitud: true,
         usuario: { include: { persona: true } },
+        solicitud_ref_cama: { select: { centro_solicitante: true } },
       },
       orderBy: { created_at: 'desc' },
       take: 200,
@@ -63,6 +64,8 @@ const getSolicitudById = async (req, res) => {
         estado_solicitud: true,
         persona: true,
         usuario: { include: { persona: true } },
+        solicitud_ref_cama: true,
+        solicitud_traslado: true,
         historial_solicitud: {
           include: {
             usuario: { include: { persona: true } },

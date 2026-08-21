@@ -14,6 +14,8 @@ const grupos = [
     titulo: 'Operación',
     items: [
       { href: '/dashboard/sala-operaciones/recepcion', label: 'Recepción de solicitudes', icon: '📞', roles: OPER },
+      { href: '/dashboard/sala-operaciones/despacho', label: 'Despacho', icon: '🚨', roles: OPER },
+      { href: '/dashboard/sala-operaciones/regulacion', label: 'Regulación médica', icon: '🩺', roles: OPER },
     ],
   },
   {
