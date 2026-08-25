@@ -1,8 +1,11 @@
 'use client';
 
+import { soloTelefono, telefonoValido } from '../../../../lib/validaciones';
 import { useEffect, useState } from 'react';
 import ModalPedidoCama from '../../../components/ModalPedidoCama';
 import ModalTraslado from '../../../components/ModalTraslado';
+import ModalDialisis from '../../../components/ModalDialisis';
+
 
 interface Cat { id: number; nombre?: string; descripcion?: string; codigo?: string; }
 interface Catalogos { tipos_solicitud: Cat[]; tipos_servicio: Cat[]; canales: Cat[]; estados: Cat[]; }
@@ -24,6 +27,8 @@ interface Solicitud {
   tipo_servicio: { codigo: string; descripcion: string } | null;
   canal_ingreso: { nombre: string };
   solicitud_ref_cama: { centro_solicitante: string; profesional_nombre?: string; especialidad?: string } | null;
+  ref_cama_reiteracion?: { created_at: string }[];
+  _count?: { ref_cama_reiteracion: number };
   estado_solicitud: { id: number; nombre: string };
   usuario: { persona: { primer_nombre: string; primer_apellido: string } };
   historial_solicitud?: any[];
@@ -41,8 +46,7 @@ const TIPOS = [
   { key: 'emergencia', label: 'Emergencia / Urgencia', icon: '🚑', activo: false },
   { key: 'traslado', label: 'Traslado', icon: '🚐', activo: true },
   { key: 'camas', label: 'Solicitud de camas', icon: '🛏️', activo: true },
-  { key: 'cobertura', label: 'Cobertura', icon: '🎪', activo: false },
-  { key: 'dialisis', label: 'Diálisis', icon: '🩺', activo: false },
+  { key: 'dialisis', label: 'Diálisis', icon: '🩺', activo: true },
 ];
 
 export default function RecepcionPage() {
@@ -56,11 +60,11 @@ export default function RecepcionPage() {
   const [modalTipo, setModalTipo] = useState(false);
   const [modalCamas, setModalCamas] = useState(false);
   const [modalTraslado, setModalTraslado] = useState(false);
+  const [modalDialisis, setModalDialisis] = useState(false);
   const [callTel, setCallTel] = useState('');
   const [callNombre, setCallNombre] = useState('');
 
   const [detalle, setDetalle] = useState<Solicitud | null>(null);
-  const [histCamas, setHistCamas] = useState<any>(null);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -87,22 +91,18 @@ export default function RecepcionPage() {
   useEffect(() => { const t = setTimeout(cargar, 250); return () => clearTimeout(t); }, [filtroEstado, filtroTipo, busqueda]);
 
   const elegirTipo = (key: string, activo: boolean) => {
-    if (!activo || !callTel.trim()) return;
+    if (!activo || !telefonoValido(callTel)) return;
     setModalTipo(false);
     if (key === 'camas') setModalCamas(true);
     if (key === 'traslado') setModalTraslado(true);
+    if (key === 'dialisis') setModalDialisis(true);
   };
 
   const verDetalle = async (id: number) => {
     const res = await fetch(`http://localhost:3001/api/solicitudes/${id}`, { headers: headers() });
     if (!res.ok) return;
     const d = await res.json();
-    setDetalle(d); setHistCamas(null);
-    // Para pedidos de cama, traer toda la línea de tiempo del paciente (por cédula)
-    if (String(d.tipo_solicitud?.nombre ?? '').includes('CAMA') && d.paciente_documento) {
-      const rh = await fetch(`http://localhost:3001/api/camas/paciente/${encodeURIComponent(d.paciente_documento)}`, { headers: headers() });
-      if (rh.ok) setHistCamas(await rh.json());
-    }
+    setDetalle(d);
   };
 
   const nombrePaciente = (s: Solicitud) =>
@@ -140,7 +140,7 @@ export default function RecepcionPage() {
       </div>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <input type="text" placeholder="Buscar paciente, denunciante o dirección..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
+        <input type="text" placeholder="Buscar por nombre, CI, denunciante o dirección..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
           style={{ ...input, flex: 1, minWidth: '220px', padding: '10px 14px' }} />
         <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={{ ...input, width: 'auto' }}>
           <option value="">Todos los tipos</option>
@@ -170,13 +170,18 @@ export default function RecepcionPage() {
               const ec = estadoColor(s.estado_solicitud.nombre);
               return (
                 <tr key={s.id} style={{ borderBottom: '0.5px solid #f3f4f6' }}>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: '#0a2540' }}>#{s.id}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280', whiteSpace: 'nowrap' }}>{fmt(s.created_at)}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: '#0a2540', whiteSpace: 'nowrap' }}>#{s.id}{s._count?.ref_cama_reiteracion ? <span style={{ marginLeft: '6px', background: '#eff6ff', color: '#1d4ed8', padding: '1px 7px', borderRadius: '20px', fontSize: '10px', fontWeight: 600 }}>🔁 {s._count.ref_cama_reiteracion}</span> : null}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280', whiteSpace: 'nowrap' }}>
+                    {s.ref_cama_reiteracion?.[0] ? <>{fmt(s.ref_cama_reiteracion[0].created_at)} <span style={{ color: '#1d4ed8', fontSize: '11px' }}>🔁</span></> : fmt(s.created_at)}
+                  </td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>{s.tipo_solicitud.nombre}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.tipo_servicio?.codigo ?? '—'}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.solicitud_ref_cama?.centro_solicitante ?? ([s.direccion, s.ciudad].filter(Boolean).join(', ') || '—')}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.canal_ingreso.nombre}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0a2540' }}>{nombrePaciente(s)}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0a2540' }}>
+                    <div>{nombrePaciente(s)}</div>
+                    {s.paciente_documento && <div style={{ fontSize: '11px', color: '#9ca3af' }}>CI {s.paciente_documento}</div>}
+                  </td>
                   <td style={{ padding: '12px 16px' }}>
                     <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{s.estado_solicitud.nombre}</span>
                   </td>
@@ -199,13 +204,13 @@ export default function RecepcionPage() {
             <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 16px' }}>Registrá quién llama y elegí el tipo de pedido.</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
               <div><label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '6px' }}>Teléfono *</label>
-                <input value={callTel} onChange={e => setCallTel(e.target.value)} style={input} /></div>
+                <input value={callTel} onChange={e => setCallTel(soloTelefono(e.target.value))} style={input} /></div>
               <div><label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '6px' }}>Nombre del solicitante</label>
                 <input value={callNombre} onChange={e => setCallNombre(e.target.value)} style={input} /></div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               {TIPOS.map(t => {
-                const habil = t.activo && !!callTel.trim();
+                const habil = t.activo && telefonoValido(callTel);
                 return (
                   <button key={t.key} onClick={() => elegirTipo(t.key, t.activo)} disabled={!habil}
                     style={{
@@ -222,7 +227,7 @@ export default function RecepcionPage() {
                 );
               })}
             </div>
-            {!callTel.trim() && <div style={{ fontSize: '12px', color: '#c2410c', marginTop: '10px' }}>Ingresá el teléfono para elegir el tipo.</div>}
+            {!telefonoValido(callTel) && <div style={{ fontSize: '12px', color: '#c2410c', marginTop: '10px' }}>Ingresá un teléfono válido (ej: 0981123456) para elegir el tipo.</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
               <button onClick={() => setModalTipo(false)} style={{ padding: '9px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cancelar</button>
             </div>
@@ -238,6 +243,9 @@ export default function RecepcionPage() {
       {/* Formulario de traslado */}
       {modalTraslado && (
         <ModalTraslado telefono={callTel} nombre={callNombre} onCerrar={() => setModalTraslado(false)} onGuardado={cargar} />
+      )}
+        {modalDialisis && (
+        <ModalDialisis telefono={callTel} nombre={callNombre} onCerrar={() => setModalDialisis(false)} onGuardado={cargar} />
       )}
 
       {/* Detalle + cambio de estado */}
@@ -263,32 +271,51 @@ export default function RecepcionPage() {
               {detalle.observacion && <div><strong>Obs.:</strong> {detalle.observacion}</div>}
             </div>
 
-            {histCamas && histCamas.pedidos?.length > 0 && (
-              <div style={{ border: '0.5px solid #e5e7eb', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '10px' }}>🛏️ Pedidos de cama de este paciente ({histCamas.pedidos.length})</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {histCamas.pedidos.map((p: any) => {
-                    const tipo = p.solicitud_ref_cama?.tipo_pedido ?? '—';
-                    const reit = p.ref_cama_reiteracion?.[0];
-                    const clin = p.ref_cama_clinica;
-                    const sv = p.signos_vitales?.[p.signos_vitales.length - 1];
+            {String(detalle.tipo_solicitud.nombre).includes('CAMA') && (() => {
+              const d: any = detalle;
+              const clin = d.ref_cama_clinica;
+              const reits = d.ref_cama_reiteracion ?? [];
+              const svNuevo = d.signos_vitales ?? [];
+              const fs = (sv: any) => sv ? `PA ${sv.presion_arterial ?? '-'} · FC ${sv.frecuencia_cardiaca ?? '-'} · FR ${sv.frecuencia_respiratoria ?? '-'} · T ${sv.temperatura ?? '-'} · Glasgow ${sv.glasgow ?? '-'} · Sat ${sv.saturacion ?? '-'}${sv.tipo_oxigeno ? ' · O2 ' + sv.tipo_oxigeno.nombre + (sv.oxigeno_flujo ? ' ' + sv.oxigeno_flujo + 'l' : '') : ''}` : '—';
+              return (
+                <div style={{ border: '0.5px solid #e5e7eb', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '10px' }}>🛏️ Cuestionarios del pedido{reits.length ? ` · 1 inicial + ${reits.length} reiteración${reits.length > 1 ? 'es' : ''}` : ''}</div>
+                  {clin && (
+                    <div style={{ borderLeft: '3px solid #c2410c', paddingLeft: '12px', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#0a2540' }}>Pedido inicial</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>Dx: {clin.diagnostico ?? '—'} · {clin.tipo_requerimiento_cama?.nombre ?? '—'} · {clin.condicion_paciente?.nombre ?? '—'}{clin.en_uti ? ' · UTI' : ''}</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>Signos: {fs(svNuevo[svNuevo.length - 1])}</div>
+                      {d.inotripicos?.length ? <div style={{ fontSize: '12px', color: '#6b7280' }}>Inotrópicos: {d.inotripicos.map((x: any) => x.tipo_inotripico.nombre + (x.dosis ? ` (${x.dosis})` : '')).join(', ')}</div> : null}
+                    </div>
+                  )}
+                  {reits.map((r: any) => {
+                    const sv = (r.signos_vitales ?? [])[(r.signos_vitales ?? []).length - 1];
                     return (
-                      <div key={p.id} style={{ borderLeft: `3px solid ${tipo === 'NUEVO' ? '#c2410c' : '#1d4ed8'}`, paddingLeft: '12px' }}>
-                        <div style={{ fontSize: '12px', color: '#0a2540' }}><strong>#{p.id} · {tipo}</strong> <span style={{ color: '#9ca3af' }}>{fmt(p.created_at)}</span></div>
-                        <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                          {tipo === 'NUEVO'
-                            ? <>Dx: {clin?.diagnostico ?? '—'} · Req: {clin?.tipo_requerimiento_cama?.nombre ?? '—'} · {clin?.condicion_paciente?.nombre ?? '—'}{clin?.en_uti ? ' · UTI' : ''}</>
-                            : <>Req: {reit?.tipo_requerimiento_cama?.nombre ?? '—'} · {reit?.condicion_paciente?.nombre ?? '—'}{reit?.en_uti ? ' · UTI' : ''}</>}
-                          {sv ? ` · Signos: PA ${sv.presion_arterial ?? '-'} FC ${sv.frecuencia_cardiaca ?? '-'} Sat ${sv.saturacion ?? '-'}` : ''}
-                        </div>
+                      <div key={r.id} style={{ borderLeft: '3px solid #1d4ed8', paddingLeft: '12px', marginBottom: '10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#0a2540' }}>Reiteración #{r.nro_reiteracion} <span style={{ color: '#9ca3af', fontWeight: 400 }}>{fmt(r.created_at)}</span></div>
+                        <div style={{ fontSize: '12px', color: '#6b7280' }}>{r.tipo_requerimiento_cama?.nombre ?? '—'} · {r.condicion_paciente?.nombre ?? '—'}{r.en_uti ? ' · UTI' : ''}{r.tratamiento ? ` · Trat: ${r.tratamiento}` : ''}</div>
+                        <div style={{ fontSize: '12px', color: '#6b7280' }}>Signos: {fs(sv)}</div>
                       </div>
                     );
                   })}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
 
+                        {String(detalle.tipo_solicitud.nombre).includes('TRASLADO') && (detalle as any).solicitud_traslado && (() => {
+              const t: any = (detalle as any).solicitud_traslado;
+              return (
+                <div style={{ border: '0.5px solid #e5e7eb', borderRadius: '10px', padding: '14px', marginBottom: '16px', fontSize: '13px', color: '#374151', lineHeight: 1.7 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '8px' }}>🚐 Datos del traslado</div>
+                  <div><strong>De:</strong> {t.origen || '—'} <strong>→ A:</strong> {t.destino || '—'}</div>
+                  {t.estudio_procedimiento ? <div><strong>Estudio / procedimiento:</strong> {t.estudio_procedimiento}</div> : null}
+                  <div><strong>Receptor:</strong> {t.receptor_nombre || '—'} · {t.receptor_telefono || '—'}</div>
+                  {t.fecha_hora_traslado ? <div><strong>Programado:</strong> {new Date(t.fecha_hora_traslado).toLocaleString('es-PY')}</div> : null}
+                  {t.acompana_medico ? <div><strong>Acompaña médico:</strong> Sí</div> : null}
+                </div>
+              );
+            })()}
             <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '10px' }}>Historial</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
               {detalle.historial_solicitud?.map((h: any) => (
@@ -303,7 +330,7 @@ export default function RecepcionPage() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => { setDetalle(null); setHistCamas(null); }} style={{ padding: '9px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cerrar</button>
+              <button onClick={() => setDetalle(null)} style={{ padding: '9px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cerrar</button>
             </div>
           </div>
         </div>

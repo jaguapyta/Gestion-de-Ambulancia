@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { soloTelefono, telefonoValido } from '../../lib/validaciones';
 
 interface Cat { id: number; nombre?: string; usa_flujo?: boolean; }
 interface Catalogos {
@@ -17,6 +18,7 @@ const dec2 = (v: string) => { const m = v.replace(/[^\d.]/g, '').match(/^\d*\.?\
 const capMax = (v: string, max: number) => { const n = parseInt(v); return isNaN(n) ? v : String(Math.min(n, max)); };
 
 const PEDIDO = {
+  centro_solicitante: '',
   paciente_nombre: '', paciente_apellido: '', paciente_edad: '', paciente_edad_unidad: 'AÑOS DE VIDA', paciente_sexo: '',
   tipo_paciente_id: '', peso: '', unidad_peso: 'KILOGRAMOS',
   tieneSeguro: false, seguro_medico: '',
@@ -32,7 +34,7 @@ const PEDIDO = {
 
 export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado }: Props) {
   const [cat, setCat] = useState<Catalogos | null>(null);
-  const [sol, setSol] = useState({ centro_solicitante: '', profesional_nombre: nombre ?? '', especialidad: '', telefono_contacto: telefono ?? '' });
+  const [sol, setSol] = useState({ profesional_nombre: nombre ?? '', especialidad: '', telefono_contacto: telefono ?? '' });
   const [centroOpen, setCentroOpen] = useState(false);
   const [pedidos, setPedidos] = useState<{ id: number; nombre: string; tipo: string }[]>([]);
 
@@ -47,6 +49,7 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState<number | null>(null);
+  const [exitoReit, setExitoReit] = useState(false);
 
   const token = () => localStorage.getItem('token') ?? '';
   const set = (k: keyof typeof PEDIDO, v: any) => setF(prev => ({ ...prev, [k]: v }));
@@ -83,15 +86,16 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
   });
   const setIno = (id: number, k: 'dosis' | 'goteo', v: string) => setInoSel(prev => ({ ...prev, [id]: { ...prev[id], [k]: v } }));
 
-  const centroValido = !!cat?.centros?.some(c => c.nombre === sol.centro_solicitante);
+  const centroValido = !!cat?.centros?.some(c => c.nombre === f.centro_solicitante);
   const oxiSel = cat?.tipos_oxigeno?.find(o => String(o.id) === f.tipo_oxigeno_id);
   const usaFlujo = !!oxiSel?.usa_flujo;
 
   const agregarPedido = async () => {
-    if (!sol.centro_solicitante || !sol.profesional_nombre || !sol.especialidad || !sol.telefono_contacto) { setError('Completá los datos del solicitante (arriba).'); return; }
-    if (!centroValido) { setError('Elegí un centro solicitante de la lista.'); return; }
+    if (!sol.profesional_nombre || !sol.especialidad || !sol.telefono_contacto) { setError('Completá los datos del solicitante (arriba).'); return; }
+    if (!telefonoValido(sol.telefono_contacto)) { setError('El teléfono del solicitante no es válido (ej: 0981123456).'); return; }
     if (f.glasgow && (parseInt(f.glasgow) < 3 || parseInt(f.glasgow) > 15)) { setError('El Glasgow debe estar entre 3 y 15.'); return; }
     if (modo === 'nuevo') {
+      if (!centroValido) { setError('Elegí un centro asistencial de la lista.'); return; }
       if (!f.tipo_paciente_id) { setError('Elegí el tipo de paciente.'); return; }
       if (!f.diagnostico) { setError('El diagnóstico es obligatorio.'); return; }
     }
@@ -110,6 +114,7 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
       };
       if (modo === 'nuevo') {
         Object.assign(body, {
+          centro_solicitante: f.centro_solicitante,
           paciente_nombre: f.paciente_nombre, paciente_apellido: f.paciente_apellido, paciente_edad: f.paciente_edad,
           paciente_edad_unidad: f.paciente_edad_unidad, paciente_sexo: f.paciente_sexo,
           seguro_medico: f.tieneSeguro ? f.seguro_medico : '', tipo_paciente_id: f.tipo_paciente_id, peso: f.peso, unidad_peso: f.unidad_peso,
@@ -123,9 +128,10 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al agregar el pedido'); return; }
       const nom = modo === 'reiteracion' ? `${original?.paciente_nombre ?? ''} ${original?.paciente_apellido ?? ''}`.trim() || `CI ${cedula}` : `${f.paciente_nombre} ${f.paciente_apellido}`.trim() || `CI ${cedula}`;
-      setPedidos(prev => [...prev, { id: data.id, nombre: nom, tipo: modo === 'reiteracion' ? 'REITERACIÓN' : 'NUEVO' }]);
+      const esReit = modo === 'reiteracion';
+      setPedidos(prev => [...prev, { id: data.id, nombre: nom, tipo: esReit ? 'REITERACIÓN' : 'NUEVO' }]);
       onGuardado(); resetPedido();
-      setExito(data.id ?? null);
+      setExitoReit(esReit); setExito(data.id ?? null);
     } catch { setError('Error de conexión'); }
     finally { setGuardando(false); }
   };
@@ -138,7 +144,7 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
 
   if (!cat) return <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}><div style={{ background: 'white', borderRadius: '12px', padding: '28px', fontSize: '14px', color: '#6b7280' }}>Cargando formulario…</div></div>;
 
-  const centrosFiltrados = cat.centros.filter(c => (c.nombre ?? '').toUpperCase().includes(sol.centro_solicitante.toUpperCase()));
+  const centrosFiltrados = cat.centros.filter(c => (c.nombre ?? '').toUpperCase().includes(f.centro_solicitante.toUpperCase()));
 
   // Campo de signo con unidad
   const signo = (k: keyof typeof PEDIDO, lbl: string, unidad: string, onChange: (v: string) => void, ph = '') => (
@@ -156,8 +162,8 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}>
         <div style={{ background: 'white', borderRadius: '14px', padding: '32px 44px', textAlign: 'center', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }}>
           <div style={{ fontSize: '54px', lineHeight: 1, marginBottom: '10px' }}>✅</div>
-          <div style={{ fontSize: '17px', fontWeight: 600, color: '#0a2540', marginBottom: '12px' }}>Pedido cargado correctamente</div>
-          <div style={{ fontSize: '12px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Número de pedido</div>
+          <div style={{ fontSize: '17px', fontWeight: 600, color: '#0a2540', marginBottom: '12px' }}>{exitoReit ? 'Reiteración cargada correctamente' : 'Pedido cargado correctamente'}</div>
+          <div style={{ fontSize: '12px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{exitoReit ? 'Se sumó al pedido' : 'Número de pedido'}</div>
           <div style={{ fontSize: '36px', fontWeight: 700, color: '#15803d', margin: '4px 0 22px' }}>#{exito}</div>
           <button onClick={() => setExito(null)} style={{ padding: '10px 30px', borderRadius: '8px', border: 'none', background: '#0a2540', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>Continuar</button>
         </div>
@@ -170,26 +176,9 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
         {error && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '10px 14px', borderRadius: '7px', fontSize: '13px', marginBottom: '8px' }}>{error}</div>}
 
         {/* Solicitante */}
-        <div style={seccion}>Solicitante (médico / centro)</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <div style={{ position: 'relative' }}>
-            <label style={label}>Centro solicitante *</label>
-            <input value={sol.centro_solicitante} onChange={e => { setS('centro_solicitante', e.target.value.toUpperCase()); setCentroOpen(true); }}
-              onFocus={() => setCentroOpen(true)} onBlur={() => setTimeout(() => setCentroOpen(false), 150)}
-              placeholder="Escribí para buscar…" style={{ ...input, borderColor: sol.centro_solicitante && !centroValido ? '#fca5a5' : '#e5e7eb' }} />
-            {centroOpen && centrosFiltrados.length > 0 && (
-              <div style={{ position: 'absolute', zIndex: 5, top: '100%', left: 0, right: 0, background: 'white', border: '0.5px solid #e5e7eb', borderRadius: '7px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: '160px', overflowY: 'auto' }}>
-                {centrosFiltrados.map(c => (
-                  <div key={c.id} onMouseDown={() => { setS('centro_solicitante', c.nombre); setCentroOpen(false); }}
-                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', color: '#0a2540' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#f0f4f8')} onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
-                    {c.nombre}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div><label style={label}>Teléfono *</label><input value={sol.telefono_contacto} onChange={e => setS('telefono_contacto', e.target.value)} style={input} /></div>
+        <div style={seccion}>Solicitante (médico)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+          <div><label style={label}>Teléfono *</label><input value={sol.telefono_contacto} onChange={e => setS('telefono_contacto', soloTelefono(e.target.value))} style={input} /></div>
           <div><label style={label}>Profesional *</label><input value={sol.profesional_nombre} onChange={e => setS('profesional_nombre', e.target.value)} style={input} /></div>
           <div><label style={label}>Especialidad *</label><input value={sol.especialidad} onChange={e => setS('especialidad', e.target.value)} style={input} /></div>
         </div>
@@ -208,18 +197,47 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
           <button onClick={buscar} disabled={buscando} style={{ padding: '9px 18px', borderRadius: '7px', border: 'none', background: '#0a2540', color: 'white', cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}>{buscando ? 'Buscando…' : 'Buscar'}</button>
         </div>
 
-        {modo === 'reiteracion' && original && (
-          <div style={{ background: '#eff6ff', border: '0.5px solid #bfdbfe', borderRadius: '8px', padding: '12px 14px', marginBottom: '8px', fontSize: '13px', color: '#1e40af' }}>
-            🔁 <strong>REITERACIÓN</strong> — {original.paciente_nombre} {original.paciente_apellido} · Dx: {original.ref_cama_clinica?.diagnostico ?? '—'}
-            <div style={{ fontSize: '12px', color: '#3b82f6', marginTop: '4px' }}>Solo cargá las variaciones (requerimiento, condición y signos). Lo demás se hereda.</div>
-          </div>
-        )}
+        {modo === 'reiteracion' && original && (() => {
+          const o: any = original; const c = o.ref_cama_clinica ?? {}; const src = o.solicitud_ref_cama ?? {}; const ob = o.ref_cama_obstetrica;
+          const ro = { fontSize: '12px', color: '#374151', lineHeight: 1.7 };
+          return (
+            <div style={{ background: '#eff6ff', border: '0.5px solid #bfdbfe', borderRadius: '8px', padding: '14px', marginBottom: '10px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e40af', marginBottom: '8px' }}>🔁 REITERACIÓN del pedido #{o.id} — datos heredados</div>
+              <div style={ro}><strong>Centro:</strong> {src.centro_solicitante ?? '—'} · <strong>Prof.:</strong> {src.profesional_nombre ?? '—'} ({src.especialidad ?? '—'})</div>
+              <div style={ro}><strong>Paciente:</strong> {o.paciente_nombre} {o.paciente_apellido} · CI {o.paciente_documento ?? '—'} · {o.paciente_edad ?? '—'} {o.paciente_edad_unidad ?? ''} · {o.paciente_sexo === 'M' ? 'Masc.' : o.paciente_sexo === 'F' ? 'Fem.' : '—'} · {c.tipo_paciente?.nombre ?? '—'}</div>
+              <div style={ro}><strong>Seguro:</strong> {c.seguro_medico || '—'} · <strong>Peso:</strong> {c.peso ? `${c.peso} ${c.unidad_peso ?? ''}` : '—'}</div>
+              <div style={ro}><strong>Diagnóstico:</strong> {c.diagnostico ?? '—'}</div>
+              {c.antecedentes ? <div style={ro}><strong>Antecedentes:</strong> {c.antecedentes}</div> : null}
+              {(c.tiempo_evolucion || c.tiempo_internacion) ? <div style={ro}><strong>Evolución:</strong> {c.tiempo_evolucion || '—'} · <strong>Internación:</strong> {c.tiempo_internacion || '—'}</div> : null}
+              {ob ? <div style={ro}><strong>Obst./RN:</strong> {[ob.edad_gestacional && `EG ${ob.edad_gestacional}`, ob.controles_prenatales != null && `Controles ${ob.controles_prenatales}`, ob.edad_materna && `Edad materna ${ob.edad_materna}`, ob.via_parto, ob.apgar && `APGAR ${ob.apgar}`].filter(Boolean).join(' · ') || '—'}</div> : null}
+              {(c.laboratorio || c.imagenes) ? <div style={ro}><strong>Lab:</strong> {c.laboratorio || '—'} · <strong>Img:</strong> {c.imagenes || '—'}</div> : null}
+              <div style={{ fontSize: '12px', color: '#3b82f6', marginTop: '8px', fontWeight: 500 }}>↓ Cargá abajo solo las variaciones (requerimiento, condición y signos).</div>
+            </div>
+          );
+        })()}
         {modo === 'nuevo' && <div style={{ background: '#fff7ed', border: '0.5px solid #fed7aa', borderRadius: '8px', padding: '10px 14px', marginBottom: '8px', fontSize: '13px', color: '#c2410c' }}>🆕 <strong>NUEVO</strong> — sin pedidos abiertos. Cargá todos los datos.</div>}
 
         {/* NUEVO */}
         {modo === 'nuevo' && (
           <>
             <div style={seccion}>Datos del paciente</div>
+            <div style={{ position: 'relative', marginBottom: '12px' }}>
+              <label style={label}>Centro asistencial *</label>
+              <input value={f.centro_solicitante} onChange={e => { set('centro_solicitante', e.target.value.toUpperCase()); setCentroOpen(true); }}
+                onFocus={() => setCentroOpen(true)} onBlur={() => setTimeout(() => setCentroOpen(false), 150)}
+                placeholder="Escribí para buscar el centro…" style={{ ...input, borderColor: f.centro_solicitante && !centroValido ? '#fca5a5' : '#e5e7eb' }} />
+              {centroOpen && centrosFiltrados.length > 0 && (
+                <div style={{ position: 'absolute', zIndex: 5, top: '100%', left: 0, right: 0, background: 'white', border: '0.5px solid #e5e7eb', borderRadius: '7px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: '160px', overflowY: 'auto' }}>
+                  {centrosFiltrados.map(c => (
+                    <div key={c.id} onMouseDown={() => { set('centro_solicitante', c.nombre); setCentroOpen(false); }}
+                      style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', color: '#0a2540' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#f0f4f8')} onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+                      {c.nombre}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div><label style={label}>Nombre y apellido</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -317,6 +335,7 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
 
             <div style={seccion}>Tratamiento recibido</div>
             <textarea value={f.tratamiento} onChange={e => set('tratamiento', e.target.value)} rows={2} style={{ ...input, resize: 'vertical' }} />
+            {modo === 'nuevo' && (<>
             <label style={{ ...label, marginTop: '10px' }}>Inotrópicos</label>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {cat.tipos_inotropico.map(t => <button key={t.id} type="button" onClick={() => toggleIno(t.id)} style={{ padding: '6px 12px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500, background: inoSel[t.id] ? '#0a2540' : '#f0f4f8', color: inoSel[t.id] ? 'white' : '#6b7280' }}>{t.nombre}</button>)}
@@ -332,6 +351,7 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
                 ))}
               </div>
             )}
+            </>)}
             {modo === 'nuevo' && <div style={{ marginTop: '12px' }}><label style={label}>Otros datos de interés</label><input value={f.otros_datos} onChange={e => set('otros_datos', e.target.value)} style={input} /></div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}>

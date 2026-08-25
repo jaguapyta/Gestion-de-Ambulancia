@@ -68,9 +68,6 @@ const crearPedidoCama = async (req, res) => {
   const b = req.body;
   const esReiteracion = b.tipo_pedido === 'REITERACION';
   try {
-    if (!b.centro_solicitante || !b.profesional_nombre || !b.especialidad || !b.telefono_contacto) {
-      return res.status(400).json({ error: 'Faltan datos del solicitante (centro, profesional, especialidad, teléfono)' });
-    }
     const canalId = await canalTelefonoId();
     const operador = await nombreUsuario(req.usuario.id); // automático e inmodificable
 
@@ -84,54 +81,40 @@ const crearPedidoCama = async (req, res) => {
     const s = b.signos ?? {};
     const haySignos = s.presion_arterial || s.frecuencia_cardiaca || s.frecuencia_respiratoria || s.temperatura || s.glasgow || s.saturacion;
 
-    // ---------- REITERACIÓN ----------
+    // ---------- REITERACIÓN (se adjunta al pedido original; NO crea un pedido nuevo) ----------
     if (esReiteracion) {
       if (!b.paciente_documento) return res.status(400).json({ error: 'Falta la cédula del paciente para la reiteración' });
       if (!b.tipo_requerimiento_id || !b.condicion_id) return res.status(400).json({ error: 'La reiteración requiere el requerimiento y la condición' });
 
       const previos = await prisma.solicitud.findMany({
         where: { tipo_solicitud_id: TIPO_REF_CAMA, paciente_documento: b.paciente_documento, estado_solicitud_id: { notIn: ESTADOS_CERRADOS } },
-        include: { solicitud_ref_cama: true }, orderBy: { created_at: 'asc' },
+        include: { ref_cama_reiteracion: { select: { id: true } } },
+        orderBy: { created_at: 'asc' },
       });
       if (previos.length === 0) return res.status(400).json({ error: 'No hay un pedido abierto para esa cédula. Cargalo como NUEVO.' });
-      const original = previos.find((p) => p.solicitud_ref_cama?.tipo_pedido === 'NUEVO') ?? previos[0];
-      const nroReit = previos.filter((p) => p.solicitud_ref_cama?.tipo_pedido === 'REITERACION').length + 1;
+      const target = previos[0]; // el pedido abierto: conserva su número
+      const nroReit = (target.ref_cama_reiteracion?.length ?? 0) + 1;
 
-      const creada = await prisma.$transaction(async (tx) => {
-        const solicitud = await tx.solicitud.create({
+      await prisma.$transaction(async (tx) => {
+        const reit = await tx.ref_cama_reiteracion.create({
           data: {
-            tipo_solicitud_id: TIPO_REF_CAMA, tipo_servicio_id: null, canal_ingreso_id: canalId,
-            estado_solicitud_id: ESTADO_PENDIENTE, recepcionista_id: req.usuario.id, denunciante_telefono: b.telefono_contacto ?? null,
-            persona_id: original.persona_id,
-            paciente_nombre: original.paciente_nombre, paciente_apellido: original.paciente_apellido,
-            paciente_documento: original.paciente_documento, paciente_edad: original.paciente_edad,
-            paciente_edad_unidad: original.paciente_edad_unidad, paciente_sexo: original.paciente_sexo,
-            observacion: b.observacion ?? null,
-          },
-        });
-        await tx.solicitud_ref_cama.create({
-          data: {
-            solicitud_id: solicitud.id, tipo_pedido: 'REITERACION', nro_pedido_anterior: original.solicitud_ref_cama?.id ?? null,
-            centro_solicitante: b.centro_solicitante, profesional_nombre: b.profesional_nombre,
-            especialidad: b.especialidad, telefono_contacto: b.telefono_contacto, operador_medico: operador,
-          },
-        });
-        await tx.ref_cama_reiteracion.create({
-          data: {
-            solicitud_id: solicitud.id, nro_reiteracion: nroReit,
+            solicitud_id: target.id, nro_reiteracion: nroReit,
             tipo_requerimiento_id: int(b.tipo_requerimiento_id), condicion_id: int(b.condicion_id),
             en_uti: b.en_uti ?? false, tratamiento: b.tratamiento ?? null, observacion: b.observacion ?? null, usuario_id: req.usuario.id,
           },
         });
-        if (haySignos) await tx.signos_vitales.create({ data: signosData(s, solicitud.id, req.usuario.id) });
-        if (inotroRows.length) await tx.inotripicos.createMany({ data: inotroRows.map((r) => ({ solicitud_id: solicitud.id, usuario_id: req.usuario.id, ...r })) });
-        await tx.historial_solicitud.create({ data: { solicitud_id: solicitud.id, estado_nuevo_id: ESTADO_PENDIENTE, usuario_id: req.usuario.id, observacion: `Reiteración #${nroReit} recepcionada` } });
-        return solicitud;
+        if (haySignos) await tx.signos_vitales.create({ data: { ...signosData(s, target.id, req.usuario.id), ref_cama_reiteracion_id: reit.id } });
+        await tx.historial_solicitud.create({
+          data: { solicitud_id: target.id, estado_anterior_id: target.estado_solicitud_id, estado_nuevo_id: target.estado_solicitud_id, usuario_id: req.usuario.id, observacion: `Reiteración #${nroReit} cargada` },
+        });
       });
-      return res.status(201).json({ ...creada, tipo_pedido: 'REITERACION' });
+      return res.status(201).json({ id: target.id, tipo_pedido: 'REITERACION', nro_reiteracion: nroReit });
     }
 
     // ---------- NUEVO ----------
+    if (!b.centro_solicitante || !b.profesional_nombre || !b.especialidad || !b.telefono_contacto) {
+      return res.status(400).json({ error: 'Faltan datos del solicitante (centro, profesional, especialidad, teléfono)' });
+    }
     if (!b.tipo_paciente_id) return res.status(400).json({ error: 'Falta el tipo de paciente' });
     if (!b.diagnostico) return res.status(400).json({ error: 'El diagnóstico es obligatorio' });
 

@@ -28,6 +28,7 @@ const getSolicitudes = async (req, res) => {
           OR: [
             { paciente_nombre: { contains: q } },
             { paciente_apellido: { contains: q } },
+            { paciente_documento: { contains: q } },
             { denunciante_nombre: { contains: q } },
             { direccion: { contains: q } },
           ],
@@ -40,6 +41,8 @@ const getSolicitudes = async (req, res) => {
         estado_solicitud: true,
         usuario: { include: { persona: true } },
         solicitud_ref_cama: { select: { centro_solicitante: true } },
+        ref_cama_reiteracion: { select: { created_at: true }, orderBy: { created_at: 'desc' }, take: 1 },
+        _count: { select: { ref_cama_reiteracion: true } },
       },
       orderBy: { created_at: 'desc' },
       take: 200,
@@ -66,6 +69,14 @@ const getSolicitudById = async (req, res) => {
         usuario: { include: { persona: true } },
         solicitud_ref_cama: true,
         solicitud_traslado: true,
+        ref_cama_clinica: { include: { tipo_paciente: true, tipo_requerimiento_cama: true, condicion_paciente: true } },
+        ref_cama_obstetrica: true,
+        ref_cama_reiteracion: {
+          include: { tipo_requerimiento_cama: true, condicion_paciente: true, usuario: { include: { persona: true } }, signos_vitales: { include: { tipo_oxigeno: true } } },
+          orderBy: { created_at: 'asc' },
+        },
+        signos_vitales: { where: { ref_cama_reiteracion_id: null }, include: { tipo_oxigeno: true }, orderBy: { created_at: 'asc' } },
+        inotripicos: { include: { tipo_inotripico: true } },
         historial_solicitud: {
           include: {
             usuario: { include: { persona: true } },

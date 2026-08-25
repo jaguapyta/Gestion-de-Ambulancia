@@ -10,15 +10,16 @@ const RRHH = ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA'];
 const OPER = ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA', 'ARM', 'MEDICO_REGULADOR'];
 
 const grupos = [
-  {
+    {
     titulo: 'Operación',
     items: [
       { href: '/dashboard/sala-operaciones/recepcion', label: 'Recepción de solicitudes', icon: '📞', roles: OPER },
       { href: '/dashboard/sala-operaciones/despacho', label: 'Despacho', icon: '🚨', roles: OPER },
       { href: '/dashboard/sala-operaciones/regulacion', label: 'Regulación médica', icon: '🩺', roles: OPER },
+      { href: '/dashboard/sala-operaciones/pacientes-dializados', label: 'Pacientes dializados', icon: '🩸', roles: ['ADMINISTRADOR', 'COORDINADOR_REGULACION'] },
     ],
   },
-  {
+  { 
     titulo: 'Recursos Humanos',
     items: [
       { href: '/dashboard/sala-operaciones/recursos-humanos/medicos', label: 'Médicos reguladores', icon: '🩺', roles: RRHH },

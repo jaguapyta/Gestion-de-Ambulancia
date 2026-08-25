@@ -191,6 +191,7 @@ model ref_cama_reiteracion {
   tipo_requerimiento_cama tipo_requerimiento_cama @relation(fields: [tipo_requerimiento_id], references: [id], onUpdate: Restrict, map: "fk_rcr_requerimiento")
   solicitud               solicitud               @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_rcr_solicitud")
   usuario                 usuario                 @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_rcr_usuario")
+  signos_vitales          signos_vitales[]
 
   @@index([condicion_id], map: "fk_rcr_condicion")
   @@index([tipo_requerimiento_id], map: "fk_rcr_requerimiento")
@@ -265,10 +266,11 @@ model rol_guardia_movil {
 model signos_vitales {
   id                      Int           @id @default(autoincrement())
   solicitud_id            Int
+  ref_cama_reiteracion_id Int?
   presion_arterial        String?       @db.VarChar(20)
   frecuencia_cardiaca     String?       @db.VarChar(10)
   frecuencia_respiratoria String?       @db.VarChar(10)
-  temperatura             Decimal?      @db.Decimal(4, 1)
+  temperatura             Decimal?      @db.Decimal(5, 2)
   glasgow                 Int?          @db.TinyInt
   saturacion              String?       @db.VarChar(10)
   tipo_oxigeno_id         Int?          @db.UnsignedTinyInt
@@ -276,10 +278,12 @@ model signos_vitales {
   usuario_id              Int
   created_at              DateTime      @default(now()) @db.DateTime(0)
   solicitud               solicitud     @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_sv_solicitud")
+  ref_cama_reiteracion    ref_cama_reiteracion? @relation(fields: [ref_cama_reiteracion_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_sv_reiteracion")
   tipo_oxigeno            tipo_oxigeno? @relation(fields: [tipo_oxigeno_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_sv_tipo_oxigeno")
   usuario                 usuario       @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_sv_usuario")
 
   @@index([solicitud_id], map: "fk_sv_solicitud")
+  @@index([ref_cama_reiteracion_id], map: "fk_sv_reiteracion")
   @@index([tipo_oxigeno_id], map: "fk_sv_tipo_oxigeno")
   @@index([usuario_id], map: "fk_sv_usuario")
 }
@@ -308,6 +312,8 @@ model solicitud {
   paciente_sexo           String?                   @db.Char(1)
   es_nn                   Boolean                   @default(false)
   observacion             String?                   @db.Text
+regulacion_cama         regulacion_cama?
+regulacion_llamada regulacion_llamada[]
   created_at              DateTime                  @default(now()) @db.DateTime(0)
   updated_at              DateTime                  @default(now()) @db.DateTime(0)
   auditoria               auditoria[]
@@ -375,13 +381,18 @@ model solicitud_ref_cama {
 }
 
 model solicitud_traslado {
-  id                 Int       @id @default(autoincrement())
-  solicitud_id       Int       @unique(map: "solicitud_id")
-  sexo               String?   @db.Char(1)
-  peso               Decimal?  @db.Decimal(6, 2)
+  id                   Int       @id @default(autoincrement())
+  solicitud_id         Int       @unique(map: "solicitud_id")
+  fecha_hora_traslado  DateTime? @db.DateTime(0)
+  acompana_medico      Boolean   @default(false)
+  estudio_procedimiento String?   @db.Text
+  sexo                 String?   @db.Char(1)
+  peso                 Decimal?  @db.Decimal(6, 2)
   unidad_peso        String?   @db.VarChar(15)
   diagnostico        String?   @db.Text
   ubicacion_paciente String?   @db.VarChar(255)
+  origen                String?   @db.VarChar(255)
+  destino               String?   @db.VarChar(255)
   receptor_nombre    String?   @db.VarChar(200)
   receptor_lugar     String?   @db.VarChar(200)
   receptor_telefono  String?   @db.VarChar(20)
@@ -518,6 +529,8 @@ model usuario {
   debe_cambiar_password                                     Boolean                    @default(true)
   created_at                                                DateTime                   @default(now()) @db.DateTime(0)
   updated_at                                                DateTime                   @default(now()) @db.DateTime(0)
+    regulacion_cama                   regulacion_cama[]
+      regulacion_llamada regulacion_llamada[]
   auditoria                                                 auditoria[]
   cobertura_cobertura_coordinador_idTousuario               cobertura[]                @relation("cobertura_coordinador_idTousuario")
   cobertura_cobertura_despachante_idTousuario               cobertura[]                @relation("cobertura_despachante_idTousuario")
@@ -983,6 +996,7 @@ model cobertura_asistencia {
 model condicion_cierre {
   id          Int        @id @default(autoincrement()) @db.UnsignedTinyInt
   nombre      String     @unique(map: "uk_condicion_cierre") @db.VarChar(50)
+    regulacion_cama regulacion_cama[]
   descripcion String?    @db.VarChar(200)
   activo      Boolean    @default(true)
   despacho    despacho[]
@@ -1134,4 +1148,43 @@ model supervisor_habilitado {
   updated_at         DateTime  @default(now()) @db.DateTime(0)
   usuario            usuario   @relation("supervisor_usuario", fields: [usuario_id], references: [id])
   habilitador        usuario   @relation("supervisor_habilitador", fields: [habilitado_por], references: [id])
+}
+model regulacion_cama {
+  id                  Int               @id @default(autoincrement())
+  solicitud_id        Int               @unique
+  medico_id           Int
+  hospital_destino    String?           @db.VarChar(200)   // dónde se consiguió la cama
+  receptor_nombre     String?           @db.VarChar(200)   // quién recibe
+  receptor_telefono   String?           @db.VarChar(15)
+  observaciones       String?           @db.Text           // datos de valor: cama/pieza/requerimientos (ej: kit de parto)
+  quien_traslada      String?           @db.VarChar(15)    // REFERENTE | SEME
+  contrarreferencia   Boolean           @default(false)    // avisó al hospital que refirió
+  enviado_despacho    Boolean           @default(false)    // si SEME traslada, va a despacho
+  condicion_cierre_id Int?              @db.UnsignedTinyInt
+  motivo_cierre       String?           @db.Text
+  fecha_resolucion    DateTime?         @db.DateTime(0)
+  fecha_cierre        DateTime?         @db.DateTime(0)
+  created_at          DateTime          @default(now()) @db.DateTime(0)
+  updated_at          DateTime          @default(now()) @db.DateTime(0)
+  solicitud           solicitud         @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_rc_solicitud")
+  usuario             usuario           @relation(fields: [medico_id], references: [id], onUpdate: Restrict, map: "fk_rc_medico")
+  condicion_cierre    condicion_cierre? @relation(fields: [condicion_cierre_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_rc_condicion_cierre")
+
+  @@index([medico_id], map: "fk_rc_medico")
+  @@index([condicion_cierre_id], map: "fk_rc_condicion_cierre")
+}
+model regulacion_llamada {
+  id                Int       @id @default(autoincrement())
+  solicitud_id      Int
+  usuario_id        Int
+  hospital_unidad   String    @db.VarChar(200)
+  medico_contactado String?   @db.VarChar(200)
+  telefono          String?   @db.VarChar(15)
+  respuesta         String?   @db.Text
+  created_at        DateTime  @default(now()) @db.DateTime(0)
+  solicitud         solicitud @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_rll_solicitud")
+  usuario           usuario   @relation(fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_rll_usuario")
+
+  @@index([solicitud_id], map: "fk_rll_solicitud")
+  @@index([usuario_id], map: "fk_rll_usuario")
 }

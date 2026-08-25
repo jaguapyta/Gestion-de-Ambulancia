@@ -23,6 +23,7 @@ app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/solicitudes', require('./routes/solicitudes.routes'));
 app.use('/api/camas', require('./routes/camas.routes'));
 app.use('/api/traslados', require('./routes/traslados.routes'));
+app.use('/api/pacientes-dializados', require('./routes/paciente_dialisis.routes'));
 app.use('/api/ambulancias', require('./routes/ambulancias.routes'));
 app.use('/api/despacho', require('./routes/despacho.routes'));
 app.use('/api/usuarios', require('./routes/usuarios.routes'));
@@ -36,5 +37,7 @@ app.use('/api/medicos', require('./routes/medicos.routes'));
 app.use('/api/arm', require('./routes/arm.routes'));
 app.use('/api/estados-temporales', require('./routes/estados-temporales.routes'));
 app.use('/api/ordenes', require('./routes/ordenes.routes'));
+app.use('/api/dialisis', require('./routes/dialisis.routes'));
+app.use('/api/regulacion/camas', require('./routes/regulacion.routes'));
 
 module.exports = app;
