@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import ModalPedidoCama from '../../../components/ModalPedidoCama';
 import ModalTraslado from '../../../components/ModalTraslado';
 import ModalDialisis from '../../../components/ModalDialisis';
+import ModalEmergencia from '../../../components/ModalEmergencia';
 
 
 interface Cat { id: number; nombre?: string; descripcion?: string; codigo?: string; }
@@ -43,7 +44,7 @@ const estadoColor = (nombre: string) => {
 
 // Los tipos de pedido. Por ahora solo Camas está construido.
 const TIPOS = [
-  { key: 'emergencia', label: 'Emergencia / Urgencia', icon: '🚑', activo: false },
+  { key: 'emergencia', label: 'Emergencia / Urgencia', icon: '🚑', activo: true },
   { key: 'traslado', label: 'Traslado', icon: '🚐', activo: true },
   { key: 'camas', label: 'Solicitud de camas', icon: '🛏️', activo: true },
   { key: 'dialisis', label: 'Diálisis', icon: '🩺', activo: true },
@@ -61,6 +62,7 @@ export default function RecepcionPage() {
   const [modalCamas, setModalCamas] = useState(false);
   const [modalTraslado, setModalTraslado] = useState(false);
   const [modalDialisis, setModalDialisis] = useState(false);
+  const [modalEmergencia, setModalEmergencia] = useState(false);
   const [callTel, setCallTel] = useState('');
   const [callNombre, setCallNombre] = useState('');
 
@@ -96,6 +98,7 @@ export default function RecepcionPage() {
     if (key === 'camas') setModalCamas(true);
     if (key === 'traslado') setModalTraslado(true);
     if (key === 'dialisis') setModalDialisis(true);
+    if (key === 'emergencia') setModalEmergencia(true);
   };
 
   const verDetalle = async (id: number) => {
@@ -244,6 +247,10 @@ export default function RecepcionPage() {
       {modalTraslado && (
         <ModalTraslado telefono={callTel} nombre={callNombre} onCerrar={() => setModalTraslado(false)} onGuardado={cargar} />
       )}
+        {modalEmergencia && (
+        <ModalEmergencia telefono={callTel} nombre={callNombre} onCerrar={() => setModalEmergencia(false)} onGuardado={cargar} />
+      )}
+
         {modalDialisis && (
         <ModalDialisis telefono={callTel} nombre={callNombre} onCerrar={() => setModalDialisis(false)} onGuardado={cargar} />
       )}

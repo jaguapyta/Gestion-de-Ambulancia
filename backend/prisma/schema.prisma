@@ -310,6 +310,7 @@ model solicitud {
   paciente_edad           String?                   @db.VarChar(20)
   paciente_edad_unidad    String?                   @db.VarChar(15)
   paciente_sexo           String?                   @db.Char(1)
+  prioridad               String?                   @db.VarChar(10)
   es_nn                   Boolean                   @default(false)
   observacion             String?                   @db.Text
 regulacion_cama         regulacion_cama?
@@ -333,7 +334,7 @@ regulacion_llamada regulacion_llamada[]
   estado_solicitud        estado_solicitud          @relation(fields: [estado_solicitud_id], references: [id], onUpdate: Restrict, map: "fk_sol_estado")
   persona                 persona?                  @relation(fields: [persona_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_sol_persona")
   usuario                 usuario                   @relation(fields: [recepcionista_id], references: [id], onUpdate: Restrict, map: "fk_sol_recepcionista")
-  tipo_servicio           tipo_servicio?            @relation(fields: [tipo_servicio_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_sol_tipo_servicio")
+  tipo_servicio           tipo_servicio?            @relation(fields: [tipo_servicio_id], references: [id], onUpdate: Restrict, map: "fk_sol_tipo_servicio")
   tipo_solicitud          tipo_solicitud            @relation(fields: [tipo_solicitud_id], references: [id], onUpdate: Restrict, map: "fk_sol_tipo_solicitud")
   solicitud_emergencia    solicitud_emergencia?
   solicitud_ref_cama      solicitud_ref_cama?
@@ -352,15 +353,19 @@ regulacion_llamada regulacion_llamada[]
 model solicitud_emergencia {
   id                       Int                       @id @default(autoincrement())
   solicitud_id             Int                       @unique(map: "solicitud_id")
-  tipo_servicio_id         Int                       @db.UnsignedTinyInt
+  tipo_servicio_id         Int?                      @db.UnsignedTinyInt
   cantidad_heridos         Int?                      @db.UnsignedTinyInt
+  motivo_consulta_id       Int?
+  relato                   String?                   @db.Text
   emergencia_accidente     emergencia_accidente?
   emergencia_no_traumatica emergencia_no_traumatica?
   emergencia_traumatica    emergencia_traumatica?
   solicitud                solicitud                 @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_se_solicitud")
-  tipo_servicio            tipo_servicio             @relation(fields: [tipo_servicio_id], references: [id], onUpdate: Restrict, map: "fk_se_tipo_servicio")
+  tipo_servicio            tipo_servicio?            @relation(fields: [tipo_servicio_id], references: [id], onUpdate: Restrict, map: "fk_se_tipo_servicio")
+  motivo_consulta          motivo_consulta?          @relation(fields: [motivo_consulta_id], references: [id], onUpdate: Restrict, map: "fk_se_motivo")
 
   @@index([tipo_servicio_id], map: "fk_se_tipo_servicio")
+  @@index([motivo_consulta_id], map: "fk_se_motivo")
 }
 
 model solicitud_ref_cama {
@@ -1187,4 +1192,46 @@ model regulacion_llamada {
 
   @@index([solicitud_id], map: "fk_rll_solicitud")
   @@index([usuario_id], map: "fk_rll_usuario")
+}
+model motivo_consulta {
+  id            Int                    @id @default(autoincrement())
+  codigo        String                 @unique(map: "uk_motivo_codigo") @db.VarChar(10)
+  nombre        String                 @db.VarChar(150)
+  color         String                 @db.VarChar(10)   // ROJO | AMARILLO | VERDE | AZUL (color base)
+  codigo_radial String?                @db.VarChar(15)   // 10.80, etc.
+  activo        Boolean                @default(true)
+  preguntas     motivo_pregunta[]
+  instrucciones motivo_instruccion[]
+  criterios     motivo_criterio[]
+  solicitud_emergencia solicitud_emergencia[]
+}
+
+model motivo_pregunta {
+  id        Int             @id @default(autoincrement())
+  motivo_id Int
+  orden     Int
+  texto     String          @db.Text
+  motivo    motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_mp_motivo")
+
+  @@index([motivo_id], map: "fk_mp_motivo")
+}
+
+model motivo_instruccion {
+  id        Int             @id @default(autoincrement())
+  motivo_id Int
+  orden     Int
+  texto     String          @db.Text
+  motivo    motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_mi_motivo")
+
+  @@index([motivo_id], map: "fk_mi_motivo")
+}
+
+model motivo_criterio {
+  id        Int             @id @default(autoincrement())
+  motivo_id Int
+  color     String          @db.VarChar(10)   // ROJO | AMARILLO | VERDE
+  criterio  String          @db.Text
+  motivo    motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_mc_motivo")
+
+  @@index([motivo_id], map: "fk_mc_motivo")
 }

@@ -39,5 +39,6 @@ app.use('/api/estados-temporales', require('./routes/estados-temporales.routes')
 app.use('/api/ordenes', require('./routes/ordenes.routes'));
 app.use('/api/dialisis', require('./routes/dialisis.routes'));
 app.use('/api/regulacion/camas', require('./routes/regulacion.routes'));
+app.use('/api/emergencias', require('./routes/emergencias.routes'));
 
 module.exports = app;
