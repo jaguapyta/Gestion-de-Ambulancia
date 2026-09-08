@@ -8,6 +8,9 @@ const DESP = ['ADMINISTRADOR', 'COORDINADOR_OPERATIVO', 'COORDINADOR_TRANSPORTE'
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
 const estadoMovilColor = (e: string) => e === 'DISPONIBLE' ? '#639922' : e === 'OCUPADO' ? '#BA7517' : '#888780';
+const PRIO_HEX: Record<string, string> = { ROJO: '#E24B4A', AMARILLO: '#EF9F27', VERDE: '#1D9E75', AZUL: '#378ADD' };
+const estLabel = (n: string): string => ({ PENDIENTE: 'Pendiente', EN_PROCESO: 'En proceso', DESPACHADA: 'Asignado', EN_CAMINO: 'En camino', EN_ESCENA: 'En el lugar', EN_TRASLADO: 'Trasladando', FINALIZADA: 'Finalizada' } as Record<string, string>)[n] ?? n;
+const estChip = (n: string) => n === 'PENDIENTE' ? { bg: '#fff7ed', tx: '#c2410c' } : { bg: '#eff6ff', tx: '#1d4ed8' };
 
 export default function DespachoPage() {
   const [tab, setTab] = useState<any>({ emergencias: [], traslados: [], moviles: [] });
@@ -16,11 +19,13 @@ export default function DespachoPage() {
   const [cerrando, setCerrando] = useState<any>(null);
   const [cond, setCond] = useState('');
   const [msg, setMsg] = useState('');
+  const [detalle, setDetalle] = useState<any>(null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<any>(null);
   const Lref = useRef<any>(null);
   const layer = useRef<any>(null);
+  const markersMov = useRef<Record<number, any>>({});
   const selRef = useRef<any>(null);
   useEffect(() => { selRef.current = sel; }, [sel]);
 
@@ -65,18 +70,21 @@ export default function DespachoPage() {
     const movilIcon = (color: string, cod: string) => L.divIcon({ className: '', iconSize: [30, 18], iconAnchor: [15, 9], html: `<div style="background:${color};color:#fff;font-size:9px;font-weight:600;border:2px solid #fff;border-radius:4px;padding:1px 3px;box-shadow:0 1px 3px rgba(0,0,0,.4);text-align:center;">${cod}</div>` });
     const pinIcon = (color: string) => L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 20], html: `<div style="background:${color};width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);"></div>` });
 
+    markersMov.current = {};
     tab.moviles.forEach((m: any) => {
-      const lat = m.base?.latitud, lng = m.base?.longitud;
+      const lat = m.latitud ?? m.base?.latitud, lng = m.longitud ?? m.base?.longitud;
       if (lat == null || lng == null) return;
-      L.marker([Number(lat), Number(lng)], { icon: movilIcon(estadoMovilColor(m.estado), m.movil?.cod_movil ?? '?') })
+      const mk = L.marker([Number(lat), Number(lng)], { icon: movilIcon(estadoMovilColor(m.estado), m.movil?.cod_movil ?? '?') })
         .bindPopup(`<b>${m.movil?.cod_movil ?? ''}</b> · ${m.tipo_soporte?.nombre ?? ''}<br>${m.estado} · ${m.base?.nombre ?? ''}<br>Tripulación: ${m.tripulacion?.length ?? 0}`)
         .addTo(layer.current);
+      markersMov.current[m.id] = mk;
     });
     [...tab.emergencias, ...tab.traslados].forEach((s: any) => {
       if (s.latitud == null || s.longitud == null) return;
       const color = s.tipo_solicitud_id === 1 ? '#E24B4A' : '#378ADD';
+      const mot = s.solicitud_emergencia?.motivo_consulta?.nombre;
       L.marker([Number(s.latitud), Number(s.longitud)], { icon: pinIcon(color) })
-        .bindPopup(`#${s.id} · ${s.paciente_nombre ?? ''} ${s.paciente_apellido ?? ''}`)
+        .bindPopup(`#${s.id}${mot ? ' · ' + mot : ''}<br>${[s.direccion, s.barrio].filter(Boolean).join(', ')}`)
         .addTo(layer.current);
     });
   };
@@ -84,6 +92,16 @@ export default function DespachoPage() {
   const guardarUbicacion = async (id: number, lat: number, lng: number) => {
     await fetch(`http://localhost:3001/api/despacho/solicitud/${id}/ubicacion`, { method: 'PUT', headers: headers(), body: JSON.stringify({ latitud: lat, longitud: lng }) });
     setMsg(`Ubicación marcada para #${id}`); cargar();
+  };
+
+  const verDetalle = async (id: number) => {
+    const r = await fetch(`http://localhost:3001/api/solicitudes/${id}`, { headers: headers() });
+    if (r.ok) setDetalle(await r.json());
+  };
+
+  const localizar = (m: any) => {
+    const map = mapObj.current; const lat = m.latitud ?? m.base?.latitud; const lng = m.longitud ?? m.base?.longitud;
+    if (map && lat != null && lng != null) { map.setView([Number(lat), Number(lng)], 14); markersMov.current[m.id]?.openPopup(); }
   };
 
   const asignar = async (rgmId: number) => {
@@ -126,12 +144,21 @@ export default function DespachoPage() {
           <div>
             <div style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280', marginBottom: '6px' }}>Servicios · prioridad</div>
             {tab.emergencias.length === 0 && <div style={{ ...box, padding: '14px', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>Sin emergencias</div>}
-            {tab.emergencias.map((s: any) => (
-              <div key={s.id} onClick={() => setSel({ tipo: 'emergencia', id: s.id, prioridad: s.prioridad })} style={{ ...box, borderLeft: '3px solid #E24B4A', borderRadius: '0 10px 10px 0', padding: '9px 10px', marginBottom: '8px', cursor: 'pointer', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>
-                <div style={{ fontSize: '12px', fontWeight: 500 }}>#{s.id} · {s.paciente_nombre} {s.paciente_apellido}</div>
-                <div style={{ fontSize: '11px', color: '#6b7280' }}>{s.direccion ?? 'sin ubicación'}</div>
-              </div>
-            ))}
+            {tab.emergencias.map((s: any) => {
+              const pr = s.prioridad || 'ROJO';
+              const mot = s.solicitud_emergencia?.motivo_consulta;
+              const est = s.estado_solicitud?.nombre; const ch = estChip(est);
+              return (
+                <div key={s.id} onClick={() => setSel({ tipo: 'emergencia', id: s.id, prioridad: s.prioridad })} onDoubleClick={() => verDetalle(s.id)} title="Clic: asignar · Doble clic: ver toda la info" style={{ ...box, borderLeft: `3px solid ${PRIO_HEX[pr] ?? '#E24B4A'}`, borderRadius: '0 10px 10px 0', padding: '9px 10px', marginBottom: '8px', cursor: 'pointer', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#0a2540' }}>#{s.id}{mot?.codigo_radial ? ` · ${mot.codigo_radial}` : ''}</span>
+                    {est && <span style={badge(ch.bg, ch.tx)}>{estLabel(est)}</span>}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', marginTop: '2px' }}>{mot?.nombre ?? '—'}</div>
+                  <div style={{ fontSize: '11px', color: '#6b7280' }}>{[s.direccion, s.barrio].filter(Boolean).join(', ') || 'sin ubicación'}</div>
+                </div>
+              );
+            })}
           </div>
 
           <div>
@@ -143,14 +170,18 @@ export default function DespachoPage() {
             <div style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280', margin: '4px 0 6px' }}>Traslados · por hora</div>
             <div style={{ ...box, overflow: 'hidden' }}>
               {tab.traslados.length === 0 && <div style={{ padding: '14px', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>Sin traslados en cola</div>}
-              {tab.traslados.map((s: any) => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 11px', borderBottom: '0.5px solid #f3f4f6' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 500, minWidth: '38px' }}>{hhmm(s.solicitud_traslado?.fecha_hora_traslado ?? s.created_at)}</span>
-                  <span style={badge(s.tipo_solicitud_id === 3 ? '#FAEEDA' : '#E6F1FB', s.tipo_solicitud_id === 3 ? '#633806' : '#0C447C')}>{s.tipo_solicitud_id === 3 ? 'Cama·SEME' : 'Traslado'}</span>
-                  <span style={{ fontSize: '12px', color: '#374151', flex: 1 }}>{s.paciente_nombre} {s.paciente_apellido} · {rutaTraslado(s)}</span>
-                  <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE' })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Asignar</button>
-                </div>
-              ))}
+              {tab.traslados.map((s: any) => {
+                const est = s.estado_solicitud?.nombre; const ch = estChip(est);
+                return (
+                  <div key={s.id} onDoubleClick={() => verDetalle(s.id)} title="Doble clic: ver toda la info · Asignar: elegir móvil" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 11px', borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 500, minWidth: '38px' }}>{hhmm(s.solicitud_traslado?.fecha_hora_traslado ?? s.created_at)}</span>
+                    <span style={badge(s.tipo_solicitud_id === 3 ? '#FAEEDA' : '#E6F1FB', s.tipo_solicitud_id === 3 ? '#633806' : '#0C447C')}>{s.tipo_solicitud_id === 3 ? 'Cama·SEME' : 'Traslado'}</span>
+                    <span style={{ fontSize: '12px', color: '#374151', flex: 1 }}>{s.paciente_nombre} {s.paciente_apellido} · {rutaTraslado(s)}</span>
+                    {est && <span style={badge(ch.bg, ch.tx)}>{estLabel(est)}</span>}
+                    <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE' })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Asignar</button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -160,9 +191,9 @@ export default function DespachoPage() {
               {tab.moviles.map((m: any) => {
                 const d = m.despacho?.[0];
                 return (
-                  <div key={m.id} style={{ padding: '9px 10px', borderBottom: '0.5px solid #f3f4f6' }}>
+                  <div key={m.id} onClick={() => localizar(m)} title="Clic: ver su ubicación en el mapa" style={{ padding: '9px 10px', borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 500, color: m.estado === 'DISPONIBLE' ? '#0a2540' : '#6b7280' }}>{m.movil?.cod_movil} · {m.tipo_soporte?.nombre}</span>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: m.estado === 'DISPONIBLE' ? '#0a2540' : '#6b7280' }}>📍 {m.movil?.cod_movil} · {m.tipo_soporte?.nombre}</span>
                       <span style={badge(m.estado === 'DISPONIBLE' ? '#EAF3DE' : '#FAEEDA', m.estado === 'DISPONIBLE' ? '#173404' : '#633806')}>{m.estado === 'DISPONIBLE' ? 'Libre' : 'Ocupado'}</span>
                     </div>
                     <div style={{ fontSize: '11px', color: '#9ca3af' }}>{m.base?.nombre}</div>
@@ -198,6 +229,41 @@ export default function DespachoPage() {
           </div>
 
         </div>
+
+        {detalle && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '24px' }}>
+            <div style={{ background: 'white', borderRadius: '12px', padding: '24px', width: '620px', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,.15)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#0a2540', margin: 0 }}>Pedido #{detalle.id} — datos de recepción</h2>
+                <button onClick={() => setDetalle(null)} style={{ background: 'transparent', border: 'none', fontSize: '20px', color: '#9ca3af', cursor: 'pointer' }}>×</button>
+              </div>
+              {(() => {
+                const d: any = detalle; const se = d.solicitud_emergencia; const mot = se?.motivo_consulta;
+                const resp = d.emergencia_respuesta ?? []; const pl = d.prioridad_log ?? []; const res = pl[pl.length - 1];
+                return (
+                  <div style={{ fontSize: '13px', color: '#374151', lineHeight: 1.7 }}>
+                    <div style={{ background: '#f8f9fb', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                      <div><b>Tipo:</b> {d.tipo_solicitud?.nombre} · <b>Estado:</b> {estLabel(d.estado_solicitud?.nombre)}</div>
+                      {mot && <div><b>Motivo:</b> {mot.nombre}{mot.codigo_radial ? ` · radial ${mot.codigo_radial}` : ''}</div>}
+                      {res && <div><b>Prioridad:</b> sugerida {res.prioridad_antes} → asignada {res.prioridad_nueva} ({res.origen})</div>}
+                      <div><b>Ubicación:</b> {[d.direccion, d.barrio, d.ciudad].filter(Boolean).join(', ') || '—'}</div>
+                      <div><b>Paciente:</b> {d.es_nn ? 'N/N' : `${d.paciente_nombre ?? ''} ${d.paciente_apellido ?? ''}`.trim() || '—'} {d.paciente_documento ? `· CI ${d.paciente_documento}` : ''} {d.paciente_edad ? `· ${d.paciente_edad} ${d.paciente_edad_unidad ?? ''}` : ''}</div>
+                      <div><b>Contacto (denunciante):</b> {d.denunciante_nombre ?? '—'} · {d.denunciante_telefono ?? '—'}</div>
+                      {se?.relato && <div><b>Relato:</b> {se.relato}</div>}
+                      {d.observacion && <div><b>Obs.:</b> {d.observacion}</div>}
+                    </div>
+                    {mot?.nota_seguridad && <div style={{ background: '#fff7ed', border: '0.5px solid #fed7aa', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', fontSize: '12px', color: '#7c2d12' }}><b>🛡️ Seguridad:</b> {mot.nota_seguridad}</div>}
+                    {resp.length > 0 && (<div style={{ marginBottom: '10px' }}><div style={{ fontWeight: 600, color: '#0a2540', marginBottom: '4px' }}>Respuestas de recepción</div>{resp.map((r: any) => (<div key={r.id} style={{ fontSize: '12px', color: '#6b7280' }}>{r.motivo_pregunta?.texto} → <b>{r.respuesta === 'NO_SABE' ? 'No sé' : r.respuesta === 'SI' ? 'Sí' : r.respuesta === 'NO' ? 'No' : r.respuesta}</b></div>))}</div>)}
+                    {d.solicitud_traslado && <div style={{ fontSize: '12px' }}><b>Traslado:</b> {d.solicitud_traslado.origen ?? '—'} → {d.solicitud_traslado.destino ?? '—'}{d.solicitud_traslado.receptor_nombre ? ` · recibe ${d.solicitud_traslado.receptor_nombre}` : ''}</div>}
+                  </div>
+                );
+              })()}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', borderTop: '0.5px solid #f0f0f0', paddingTop: '12px' }}>
+                <button onClick={() => setDetalle(null)} style={{ padding: '8px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ProtectedRoute>
   );

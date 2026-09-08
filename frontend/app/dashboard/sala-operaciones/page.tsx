@@ -1,17 +1,9 @@
-'use client';
-
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
-export default function SalaOperacionesPage() {
-  const router = useRouter();
-  useEffect(() => {
-    let rol = '';
-    try { rol = JSON.parse(localStorage.getItem('usuario') ?? '{}').rol ?? ''; } catch { }
-    const destino = (rol === 'ARM' || rol === 'MEDICO_REGULADOR')
-      ? '/dashboard/sala-operaciones/recepcion'
-      : '/dashboard/sala-operaciones/recursos-humanos/medicos';
-    router.replace(destino);
-  }, []);
-  return null;
+export default function SalaOperacionesLanding() {
+  return (
+    <div style={{ background: 'white', border: '0.5px solid #e5e7eb', borderRadius: '12px', minHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px' }}>
+      <div style={{ fontSize: '40px', marginBottom: '14px' }}>🏥</div>
+      <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Centro de Regulación</h1>
+      <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '8px', maxWidth: '440px' }}>Elegí una opción del menú lateral para comenzar.</p>
+    </div>
+  );
 }

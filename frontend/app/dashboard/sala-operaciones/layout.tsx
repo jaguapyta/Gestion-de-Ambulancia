@@ -15,6 +15,8 @@ const grupos = [
       { href: '/dashboard/sala-operaciones/despacho', label: 'Despacho', icon: '🚨', roles: OPER },
       { href: '/dashboard/sala-operaciones/regulacion', label: 'Regulación médica', icon: '🩺', roles: OPER },
       { href: '/dashboard/sala-operaciones/pacientes-dializados', label: 'Pacientes dializados', icon: '🩸', roles: ['ADMINISTRADOR', 'COORDINADOR_REGULACION'] },
+      { href: '/dashboard/sala-operaciones/protocolo', label: 'Protocolo emergencias', icon: '🚨', roles: ['ADMINISTRADOR', 'COORDINADOR_REGULACION'] },
+      { href: '/dashboard/sala-operaciones/sinonimos', label: 'Sinónimos', icon: '🔤', roles: ['ADMINISTRADOR', 'COORDINADOR_REGULACION'] },
     ],
   },
   {

@@ -19,17 +19,21 @@ const getCatalogos = async (req, res) => {
 
 const getTablero = async (req, res) => {
   try {
-    // Emergencias (columna izquierda) — por antigüedad (a futuro por color)
+    // Emergencias (columna izquierda) — quedan a la vista hasta que se cierran (8); pendientes primero.
     const emergencias = await prisma.solicitud.findMany({
-      where: { tipo_solicitud_id: 1, estado_solicitud_id: { in: ABIERTOS } },
-      include: { estado_solicitud: true },
+      where: { tipo_solicitud_id: 1, estado_solicitud_id: { not: 8 } },
+      include: {
+        estado_solicitud: true,
+        solicitud_emergencia: { include: { motivo_consulta: { select: { nombre: true, codigo_radial: true } } } },
+      },
       orderBy: { created_at: 'asc' },
     });
+    emergencias.sort((a, b) => (a.estado_solicitud.nombre === 'PENDIENTE' ? 0 : 1) - (b.estado_solicitud.nombre === 'PENDIENTE' ? 0 : 1));
 
     // Traslados (debajo del mapa) — por hora: TRASLADO + CAMA (SEME + enviado a despacho)
     const traslados = await prisma.solicitud.findMany({
       where: {
-        estado_solicitud_id: { in: ABIERTOS },
+        estado_solicitud_id: { not: 8 },   // quedan a la vista hasta que se cierran
         OR: [
           { tipo_solicitud_id: 2 },
           { tipo_solicitud_id: 3, regulacion_cama: { enviado_despacho: true, quien_traslada: 'SEME' } },

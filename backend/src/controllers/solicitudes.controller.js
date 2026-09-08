@@ -22,7 +22,8 @@ const getSolicitudes = async (req, res) => {
   try {
     const solicitudes = await prisma.solicitud.findMany({
       where: {
-        ...(estado_id ? { estado_solicitud_id: parseInt(estado_id) } : {}),
+        // Por defecto se ocultan las CERRADAS (8): un pedido queda a la vista hasta que se cierra.
+        ...(estado_id ? { estado_solicitud_id: parseInt(estado_id) } : { estado_solicitud_id: { not: 8 } }),
         ...(tipo_id ? { tipo_solicitud_id: parseInt(tipo_id) } : {}),
         ...(q ? {
           OR: [
@@ -41,12 +42,15 @@ const getSolicitudes = async (req, res) => {
         estado_solicitud: true,
         usuario: { include: { persona: true } },
         solicitud_ref_cama: { select: { centro_solicitante: true } },
+        solicitud_emergencia: { include: { motivo_consulta: { select: { nombre: true, codigo_radial: true } } } },
         ref_cama_reiteracion: { select: { created_at: true }, orderBy: { created_at: 'desc' }, take: 1 },
         _count: { select: { ref_cama_reiteracion: true } },
       },
       orderBy: { created_at: 'desc' },
       take: 200,
     });
+    // Pendientes primero; el resto por más reciente (orden ya aplicado arriba).
+    solicitudes.sort((a, b) => (a.estado_solicitud.nombre === 'PENDIENTE' ? 0 : 1) - (b.estado_solicitud.nombre === 'PENDIENTE' ? 0 : 1));
     res.json(solicitudes);
   } catch (err) {
     console.error(err);
@@ -69,6 +73,10 @@ const getSolicitudById = async (req, res) => {
         usuario: { include: { persona: true } },
         solicitud_ref_cama: true,
         solicitud_traslado: true,
+        traslado_dialisis: true,
+        solicitud_emergencia: { include: { motivo_consulta: true } },
+        emergencia_respuesta: { include: { motivo_pregunta: true } },
+        prioridad_log: { include: { usuario: { include: { persona: true } } }, orderBy: { created_at: 'asc' } },
         ref_cama_clinica: { include: { tipo_paciente: true, tipo_requerimiento_cama: true, condicion_paciente: true } },
         ref_cama_obstetrica: true,
         ref_cama_reiteracion: {

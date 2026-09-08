@@ -16,6 +16,7 @@ interface Solicitud {
   denunciante_nombre: string | null;
   denunciante_telefono: string | null;
   direccion: string | null;
+  barrio: string | null;
   ciudad: string | null;
   paciente_nombre: string | null;
   paciente_apellido: string | null;
@@ -28,6 +29,7 @@ interface Solicitud {
   tipo_servicio: { codigo: string; descripcion: string } | null;
   canal_ingreso: { nombre: string };
   solicitud_ref_cama: { centro_solicitante: string; profesional_nombre?: string; especialidad?: string } | null;
+  solicitud_emergencia?: { motivo_consulta: { nombre: string; codigo_radial: string | null } | null } | null;
   ref_cama_reiteracion?: { created_at: string }[];
   _count?: { ref_cama_reiteracion: number };
   estado_solicitud: { id: number; nombre: string };
@@ -41,6 +43,12 @@ const estadoColor = (nombre: string) => {
   if (['CANCELADA', 'FALSA_ALARMA', 'NO_CONFIRMADA'].includes(nombre)) return { bg: '#fef2f2', color: '#dc2626' };
   return { bg: '#eff6ff', color: '#1d4ed8' };
 };
+
+const estadoLabel = (n: string): string => ({
+  PENDIENTE: 'Pendiente', EN_PROCESO: 'En proceso', DESPACHADA: 'Asignado', EN_CAMINO: 'En camino',
+  EN_ESCENA: 'En el lugar', EN_TRASLADO: 'Trasladando', FINALIZADA: 'Finalizada', RESUELTO: 'Resuelto',
+  CERRADA: 'Cerrada', CANCELADA: 'Cancelada', FALSA_ALARMA: 'Falsa alarma', NO_CONFIRMADA: 'No confirmada',
+} as Record<string, string>)[n] ?? n;
 
 // Los tipos de pedido. Por ahora solo Camas está construido.
 const TIPOS = [
@@ -159,36 +167,35 @@ export default function RecepcionPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
           <thead>
             <tr style={{ background: '#f8f9fb', borderBottom: '0.5px solid #e5e7eb' }}>
-              {['N° Pedido', 'Ingreso', 'Tipo', 'Servicio', 'Origen', 'Canal', 'Paciente', 'Estado', 'Recepcionista', ''].map(col => (
+              {['N° Pedido', 'Ingreso', 'Tipo', 'Servicio (radial)', 'Motivo de llamada', 'Dirección exacta', 'Paciente', 'Estado', ''].map(col => (
                 <th key={col} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', color: '#6b7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {cargando ? (
-              <tr><td colSpan={10} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Cargando...</td></tr>
+              <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Cargando...</td></tr>
             ) : solicitudes.length === 0 ? (
-              <tr><td colSpan={10} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No hay solicitudes</td></tr>
+              <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>No hay solicitudes</td></tr>
             ) : solicitudes.map((s) => {
               const ec = estadoColor(s.estado_solicitud.nombre);
               return (
-                <tr key={s.id} style={{ borderBottom: '0.5px solid #f3f4f6' }}>
+                <tr key={s.id} onDoubleClick={() => verDetalle(s.id)} title="Doble clic para ver toda la información" style={{ borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
                   <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 600, color: '#0a2540', whiteSpace: 'nowrap' }}>#{s.id}{s._count?.ref_cama_reiteracion ? <span style={{ marginLeft: '6px', background: '#eff6ff', color: '#1d4ed8', padding: '1px 7px', borderRadius: '20px', fontSize: '10px', fontWeight: 600 }}>🔁 {s._count.ref_cama_reiteracion}</span> : null}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280', whiteSpace: 'nowrap' }}>
                     {s.ref_cama_reiteracion?.[0] ? <>{fmt(s.ref_cama_reiteracion[0].created_at)} <span style={{ color: '#1d4ed8', fontSize: '11px' }}>🔁</span></> : fmt(s.created_at)}
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>{s.tipo_solicitud.nombre}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.tipo_servicio?.codigo ?? '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.solicitud_ref_cama?.centro_solicitante ?? ([s.direccion, s.ciudad].filter(Boolean).join(', ') || '—')}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.canal_ingreso.nombre}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280', whiteSpace: 'nowrap' }}>{s.tipo_solicitud.nombre === 'EMERGENCIA' ? (s.solicitud_emergencia?.motivo_consulta?.codigo_radial ?? '—') : (s.tipo_servicio?.codigo ?? '—')}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#374151' }}>{s.solicitud_emergencia?.motivo_consulta?.nombre ?? '—'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{[s.direccion, s.barrio, s.ciudad].filter(Boolean).join(', ') || (s.solicitud_ref_cama?.centro_solicitante ?? '—')}</td>
                   <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0a2540' }}>
                     <div>{nombrePaciente(s)}</div>
                     {s.paciente_documento && <div style={{ fontSize: '11px', color: '#9ca3af' }}>CI {s.paciente_documento}</div>}
                   </td>
                   <td style={{ padding: '12px 16px' }}>
-                    <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{s.estado_solicitud.nombre}</span>
+                    <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{estadoLabel(s.estado_solicitud.nombre)}</span>
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{s.usuario.persona.primer_nombre} {s.usuario.persona.primer_apellido}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <button onClick={() => verDetalle(s.id)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540' }}>Ver</button>
                   </td>
@@ -248,7 +255,7 @@ export default function RecepcionPage() {
         <ModalTraslado telefono={callTel} nombre={callNombre} onCerrar={() => setModalTraslado(false)} onGuardado={cargar} />
       )}
         {modalEmergencia && (
-        <ModalEmergencia telefono={callTel} nombre={callNombre} onCerrar={() => setModalEmergencia(false)} onGuardado={cargar} />
+        <ModalEmergencia telefono={callTel} nombre={callNombre} onCerrar={() => setModalEmergencia(false)} onGuardado={cargar} onVolver={() => { setModalEmergencia(false); setModalTipo(true); }} />
       )}
 
         {modalDialisis && (
@@ -261,7 +268,7 @@ export default function RecepcionPage() {
           <div style={{ background: 'white', borderRadius: '12px', padding: '28px', width: '600px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Solicitud #{detalle.id}</h2>
-              <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: estadoColor(detalle.estado_solicitud.nombre).bg, color: estadoColor(detalle.estado_solicitud.nombre).color }}>{detalle.estado_solicitud.nombre}</span>
+              <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, background: estadoColor(detalle.estado_solicitud.nombre).bg, color: estadoColor(detalle.estado_solicitud.nombre).color }}>{estadoLabel(detalle.estado_solicitud.nombre)}</span>
             </div>
 
             <div style={{ background: '#f8f9fb', borderRadius: '8px', padding: '14px', marginBottom: '16px', fontSize: '13px', color: '#374151', lineHeight: 1.7 }}>
@@ -273,10 +280,36 @@ export default function RecepcionPage() {
                   {detalle.solicitud_ref_cama.especialidad ? ` (${detalle.solicitud_ref_cama.especialidad})` : ''}</div>
               )}
               <div><strong>Contacto:</strong> {detalle.denunciante_nombre ?? '—'} · {detalle.denunciante_telefono ?? '—'}</div>
-              <div><strong>Ubicación:</strong> {[detalle.direccion, detalle.ciudad].filter(Boolean).join(', ') || '—'}</div>
+              <div><strong>Ubicación:</strong> {[detalle.direccion, detalle.barrio, detalle.ciudad].filter(Boolean).join(', ') || '—'}</div>
               <div><strong>Paciente:</strong> {nombrePaciente(detalle)} {detalle.paciente_edad ? `· ${detalle.paciente_edad}` : ''} {detalle.paciente_documento ? `· CI ${detalle.paciente_documento}` : ''}</div>
               {detalle.observacion && <div><strong>Obs.:</strong> {detalle.observacion}</div>}
             </div>
+
+            {detalle.tipo_solicitud.nombre === 'EMERGENCIA' && (() => {
+              const d: any = detalle;
+              const se = d.solicitud_emergencia; const mot = se?.motivo_consulta;
+              const resp = d.emergencia_respuesta ?? []; const pl = d.prioridad_log ?? [];
+              const result = pl[pl.length - 1];
+              return (
+                <div style={{ border: '0.5px solid #e5e7eb', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '10px' }}>🚑 Emergencia</div>
+                  <div style={{ fontSize: '12px', color: '#374151', lineHeight: 1.7 }}>
+                    <div><strong>Motivo:</strong> {mot?.nombre ?? '—'}{mot?.codigo_radial ? ` · radial ${mot.codigo_radial}` : ''}</div>
+                    {result && <div><strong>Prioridad:</strong> sugerida {result.prioridad_antes} → asignada {result.prioridad_nueva} ({result.origen})</div>}
+                    {se?.relato && <div><strong>Relato:</strong> {se.relato}</div>}
+                    {se?.cantidad_heridos ? <div><strong>Heridos:</strong> {se.cantidad_heridos}</div> : null}
+                  </div>
+                  {resp.length > 0 && (
+                    <div style={{ marginTop: '10px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#0a2540', marginBottom: '4px' }}>Respuestas de recepción</div>
+                      {resp.map((r: any) => (
+                        <div key={r.id} style={{ fontSize: '12px', color: '#6b7280' }}>{r.motivo_pregunta?.texto ?? 'Pregunta'} → <b>{r.respuesta === 'NO_SABE' ? 'No sé' : r.respuesta === 'SI' ? 'Sí' : r.respuesta === 'NO' ? 'No' : r.respuesta}</b></div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {String(detalle.tipo_solicitud.nombre).includes('CAMA') && (() => {
               const d: any = detalle;

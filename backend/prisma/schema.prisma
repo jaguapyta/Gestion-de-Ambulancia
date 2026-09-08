@@ -245,6 +245,8 @@ model rol_guardia_movil {
   base_id         Int             @db.UnsignedTinyInt
   tipo_soporte_id Int             @db.UnsignedTinyInt
   estado          String          @default("DISPONIBLE") @db.VarChar(20)
+  latitud         Decimal?        @db.Decimal(10, 7)
+  longitud        Decimal?        @db.Decimal(10, 7)
   activo          Boolean         @default(true)
   created_at      DateTime        @default(now()) @db.DateTime(0)
   updated_at      DateTime        @default(now()) @db.DateTime(0)
@@ -337,6 +339,7 @@ regulacion_llamada regulacion_llamada[]
   tipo_servicio           tipo_servicio?            @relation(fields: [tipo_servicio_id], references: [id], onUpdate: Restrict, map: "fk_sol_tipo_servicio")
   tipo_solicitud          tipo_solicitud            @relation(fields: [tipo_solicitud_id], references: [id], onUpdate: Restrict, map: "fk_sol_tipo_solicitud")
   solicitud_emergencia    solicitud_emergencia?
+  emergencia_respuesta    emergencia_respuesta[]
   solicitud_ref_cama      solicitud_ref_cama?
   solicitud_traslado      solicitud_traslado?
   traslado_dialisis       traslado_dialisis?
@@ -357,6 +360,14 @@ model solicitud_emergencia {
   cantidad_heridos         Int?                      @db.UnsignedTinyInt
   motivo_consulta_id       Int?
   relato                   String?                   @db.Text
+  prioridad_sugerida       String?                   @db.VarChar(10)
+  prioridad_asignada       String?                   @db.VarChar(10)
+  bnd_sin_conciencia       Boolean                   @default(false)
+  bnd_sin_respiracion      Boolean                   @default(false)
+  bnd_sin_pulso            Boolean                   @default(false)
+  bnd_sangrado_masivo      Boolean                   @default(false)
+  bnd_convulsionando       Boolean                   @default(false)
+  bnd_dificultad_resp      Boolean                   @default(false)
   emergencia_accidente     emergencia_accidente?
   emergencia_no_traumatica emergencia_no_traumatica?
   emergencia_traumatica    emergencia_traumatica?
@@ -1199,19 +1210,28 @@ model motivo_consulta {
   nombre        String                 @db.VarChar(150)
   color         String                 @db.VarChar(10)   // ROJO | AMARILLO | VERDE | AZUL (color base)
   codigo_radial String?                @db.VarChar(15)   // 10.80, etc.
+  nota_seguridad String?               @db.Text          // riesgos de escena / seguridad del personal
   activo        Boolean                @default(true)
   preguntas     motivo_pregunta[]
   instrucciones motivo_instruccion[]
   criterios     motivo_criterio[]
+  sinonimos     motivo_sinonimo[]
   solicitud_emergencia solicitud_emergencia[]
 }
 
 model motivo_pregunta {
-  id        Int             @id @default(autoincrement())
-  motivo_id Int
-  orden     Int
-  texto     String          @db.Text
-  motivo    motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_mp_motivo")
+  id          Int             @id @default(autoincrement())
+  motivo_id   Int
+  orden       Int
+  texto       String          @db.Text
+  tipo_respuesta String       @default("SI_NO") @db.VarChar(10)  // SI_NO | TEXTO
+  es_bandera   Boolean        @default(false)
+  resp_alarma  String?        @db.VarChar(3)    // SI | NO : respuesta que dispara la alarma (legacy)
+  color_alarma String         @default("ROJO") @db.VarChar(10)   // legacy
+  color_si     String?        @db.VarChar(10)   // ROJO|AMARILLO|VERDE si la respuesta es SI
+  color_no     String?        @db.VarChar(10)   // ROJO|AMARILLO|VERDE si la respuesta es NO
+  motivo      motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_mp_motivo")
+  respuestas  emergencia_respuesta[]
 
   @@index([motivo_id], map: "fk_mp_motivo")
 }
@@ -1234,4 +1254,30 @@ model motivo_criterio {
   motivo    motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_mc_motivo")
 
   @@index([motivo_id], map: "fk_mc_motivo")
+}
+
+model motivo_sinonimo {
+  id         Int             @id @default(autoincrement())
+  motivo_id  Int
+  texto      String          @db.VarChar(150)
+  origen     String          @default("MANUAL") @db.VarChar(10)   // SEED | MANUAL | IA
+  activo     Boolean         @default(true)
+  creado_por Int?
+  created_at DateTime        @default(now()) @db.DateTime(0)
+  motivo     motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_ms_motivo")
+
+  @@index([motivo_id], map: "fk_ms_motivo")
+}
+
+model emergencia_respuesta {
+  id                Int             @id @default(autoincrement())
+  solicitud_id      Int
+  motivo_pregunta_id Int
+  respuesta         String          @db.VarChar(10)   // SI | NO | NO_SABE
+  created_at        DateTime        @default(now()) @db.DateTime(0)
+  solicitud         solicitud       @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_er_solicitud")
+  motivo_pregunta   motivo_pregunta @relation(fields: [motivo_pregunta_id], references: [id], onUpdate: Restrict, map: "fk_er_pregunta")
+
+  @@index([solicitud_id], map: "fk_er_solicitud")
+  @@index([motivo_pregunta_id], map: "fk_er_pregunta")
 }
