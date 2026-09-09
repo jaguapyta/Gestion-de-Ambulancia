@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '../../components/ProtectedRoute';
+import FichaPrehospitalaria from '../../components/FichaPrehospitalaria';
 
 const EST: Record<number, { l: string; c: string; bg: string }> = {
   1: { l: 'Asignado / en camino', c: '#1d4ed8', bg: '#eff6ff' },
@@ -19,6 +20,7 @@ export default function ServiciosPage() {
   const [sel, setSel] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState('');
+  const [fichaAbierta, setFichaAbierta] = useState(false);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -147,8 +149,11 @@ export default function ServiciosPage() {
 
                 {esParamedico && (
                   <div style={{ border: '0.5px dashed #cbd5e1', borderRadius: '10px', padding: '14px', marginBottom: '12px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#0a2540', marginBottom: '4px' }}>🩺 Ficha prehospitalaria</div>
-                    <div style={{ fontSize: '12px', color: '#9ca3af' }}>Próximamente — pendiente de cargar el formato. Al completarla se cerrará el servicio (los datos ya recabados por recepción vendrán precargados).</div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#0a2540', marginBottom: '6px' }}>🩺 Ficha prehospitalaria</div>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px' }}>Los datos de recepción vienen precargados. Al cerrarla con la firma del prestador, el servicio pasa a CERRADO.</div>
+                    <button onClick={() => setFichaAbierta(true)} style={{ padding: '8px 16px', borderRadius: '7px', border: 'none', background: '#0a2540', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+                      Abrir ficha prehospitalaria
+                    </button>
                   </div>
                 )}
 
@@ -159,6 +164,14 @@ export default function ServiciosPage() {
             </div>
           );
         })()}
+
+        {fichaAbierta && sel && (
+          <FichaPrehospitalaria
+            solicitudId={sel.solicitud?.id}
+            onCerrar={() => setFichaAbierta(false)}
+            onGuardado={() => { setFichaAbierta(false); setSel(null); cargar(); }}
+          />
+        )}
       </div>
     </ProtectedRoute>
   );

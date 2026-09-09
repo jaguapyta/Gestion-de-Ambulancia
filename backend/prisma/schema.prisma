@@ -345,6 +345,7 @@ regulacion_llamada regulacion_llamada[]
   solicitud_ref_cama      solicitud_ref_cama?
   solicitud_traslado      solicitud_traslado?
   traslado_dialisis       traslado_dialisis?
+  ficha_prehospitalaria   ficha_prehospitalaria?
   traslado_requerimientos traslado_requerimientos[]
 
   @@index([canal_ingreso_id], map: "fk_sol_canal")
@@ -353,6 +354,21 @@ regulacion_llamada regulacion_llamada[]
   @@index([recepcionista_id], map: "fk_sol_recepcionista")
   @@index([tipo_servicio_id], map: "fk_sol_tipo_servicio")
   @@index([tipo_solicitud_id], map: "fk_sol_tipo_solicitud")
+}
+
+model ficha_prehospitalaria {
+  id              Int       @id @default(autoincrement())
+  solicitud_id    Int       @unique(map: "uk_ficha_solicitud")
+  datos           String    @db.LongText
+  firma_entrega   String?   @db.LongText
+  firma_prestador String?   @db.LongText
+  creado_por      Int
+  created_at      DateTime  @default(now()) @db.DateTime(0)
+  updated_at      DateTime  @default(now()) @db.DateTime(0)
+  solicitud       solicitud @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_ficha_solicitud")
+  usuario         usuario   @relation(fields: [creado_por], references: [id], onUpdate: Restrict, map: "fk_ficha_usuario")
+
+  @@index([creado_por], map: "fk_ficha_usuario")
 }
 
 model solicitud_emergencia {
@@ -583,6 +599,7 @@ model usuario {
   signos_vitales                                            signos_vitales[]
   solicitud                                                 solicitud[]
   tripulacion                                               tripulacion[]
+  ficha_prehospitalaria                                     ficha_prehospitalaria[]
   persona                                                   persona                    @relation(fields: [persona_id], references: [id], onUpdate: Restrict, map: "fk_usuario_persona")
   rol                                                       rol                        @relation(fields: [rol_id], references: [id], onUpdate: Restrict, map: "fk_usuario_rol")
 
