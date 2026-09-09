@@ -43,6 +43,7 @@ const getSolicitudes = async (req, res) => {
         usuario: { include: { persona: true } },
         solicitud_ref_cama: { select: { centro_solicitante: true } },
         solicitud_emergencia: { include: { motivo_consulta: { select: { nombre: true, codigo_radial: true } } } },
+        despacho: { where: { estado_despacho_id: { in: [1, 2, 3] } }, take: 1, orderBy: { id: 'desc' }, include: { rol_guardia_movil: { include: { movil: true } } } },
         ref_cama_reiteracion: { select: { created_at: true }, orderBy: { created_at: 'desc' }, take: 1 },
         _count: { select: { ref_cama_reiteracion: true } },
       },
@@ -77,6 +78,7 @@ const getSolicitudById = async (req, res) => {
         solicitud_emergencia: { include: { motivo_consulta: true } },
         emergencia_respuesta: { include: { motivo_pregunta: true } },
         prioridad_log: { include: { usuario: { include: { persona: true } } }, orderBy: { created_at: 'asc' } },
+        despacho: { orderBy: { id: 'desc' }, take: 1, include: { estado_despacho: true, rol_guardia_movil: { include: { movil: true, tipo_soporte: true, tripulacion: { include: { usuario: { include: { persona: true } } } } } } } },
         ref_cama_clinica: { include: { tipo_paciente: true, tipo_requerimiento_cama: true, condicion_paciente: true } },
         ref_cama_obstetrica: true,
         ref_cama_reiteracion: {

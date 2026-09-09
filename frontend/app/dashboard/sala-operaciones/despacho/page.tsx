@@ -12,6 +12,15 @@ const PRIO_HEX: Record<string, string> = { ROJO: '#E24B4A', AMARILLO: '#EF9F27',
 const estLabel = (n: string): string => ({ PENDIENTE: 'Pendiente', EN_PROCESO: 'En proceso', DESPACHADA: 'Asignado', EN_CAMINO: 'En camino', EN_ESCENA: 'En el lugar', EN_TRASLADO: 'Trasladando', FINALIZADA: 'Finalizada' } as Record<string, string>)[n] ?? n;
 const estChip = (n: string) => n === 'PENDIENTE' ? { bg: '#fff7ed', tx: '#c2410c' } : { bg: '#eff6ff', tx: '#1d4ed8' };
 
+// Regla de reasignación: emergencia solo antes de "en el lugar" (estado_despacho 1);
+// traslado/cama mientras el servicio no esté cerrado (no 4/5).
+const puedeReasignar = (s: any): boolean => {
+  const d = s.despacho?.[0]; if (!d) return false;
+  if (s.tipo_solicitud_id === 1) return d.estado_despacho_id === 1;
+  return ![4, 5].includes(d.estado_despacho_id);
+};
+const movilAsignado = (s: any): string | null => s.despacho?.[0]?.rol_guardia_movil?.movil?.cod_movil ?? null;
+
 export default function DespachoPage() {
   const [tab, setTab] = useState<any>({ emergencias: [], traslados: [], moviles: [] });
   const [cat, setCat] = useState<any>({ estados_despacho: [], condiciones_cierre: [] });
@@ -54,7 +63,7 @@ export default function DespachoPage() {
       layer.current = L.layerGroup().addTo(map);
       map.on('click', (e: any) => {
         const s = selRef.current;
-        if (s) guardarUbicacion(s.id, e.latlng.lat, e.latlng.lng);
+        if (s && !s.despachoId) guardarUbicacion(s.id, e.latlng.lat, e.latlng.lng);
       });
       mapObj.current = map;
       pintar();
@@ -104,8 +113,15 @@ export default function DespachoPage() {
     if (map && lat != null && lng != null) { map.setView([Number(lat), Number(lng)], 14); markersMov.current[m.id]?.openPopup(); }
   };
 
+  // Al elegir un móvil: si estamos reasignando (sel.despachoId) va por PATCH; si no, crea el despacho.
   const asignar = async (rgmId: number) => {
     if (!sel) return;
+    if (sel.despachoId) {
+      const res = await fetch(`http://localhost:3001/api/despacho/${sel.despachoId}/reasignar`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ rol_guardia_movil_id: rgmId }) });
+      if (res.ok) { setMsg(`Pedido #${sel.id} reasignado`); setSel(null); cargar(); }
+      else { const e = await res.json().catch(() => ({})); setMsg(e.error || 'No se pudo reasignar'); }
+      return;
+    }
     const res = await fetch('http://localhost:3001/api/despacho/asignar', { method: 'POST', headers: headers(), body: JSON.stringify({ solicitud_id: sel.id, rol_guardia_movil_id: rgmId, prioridad: sel.prioridad || 'VERDE' }) });
     if (res.ok) { setMsg(`Móvil asignado al pedido #${sel.id}`); setSel(null); cargar(); }
     else setMsg('No se pudo asignar');
@@ -134,7 +150,7 @@ export default function DespachoPage() {
           </div>
         </div>
         {sel && <div style={{ background: '#eff6ff', color: '#1e40af', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', margin: '8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Asignando pedido <b>#{sel.id}</b> — elegí un móvil disponible, o hacé clic en el mapa para marcar su ubicación.</span>
+          <span>{sel.despachoId ? 'Reasignando' : 'Asignando'} pedido <b>#{sel.id}</b> — elegí un móvil disponible{sel.despachoId ? '.' : ', o hacé clic en el mapa para marcar su ubicación.'}</span>
           <button onClick={() => setSel(null)} style={{ fontSize: '11px', padding: '3px 8px' }}>Cancelar</button>
         </div>}
         {msg && <div style={{ background: '#f0fdf4', color: '#15803d', padding: '7px 12px', borderRadius: '8px', fontSize: '12px', margin: '8px 0' }}>{msg}</div>}
@@ -148,14 +164,23 @@ export default function DespachoPage() {
               const pr = s.prioridad || 'ROJO';
               const mot = s.solicitud_emergencia?.motivo_consulta;
               const est = s.estado_solicitud?.nombre; const ch = estChip(est);
+              const asignado = movilAsignado(s);
               return (
-                <div key={s.id} onClick={() => setSel({ tipo: 'emergencia', id: s.id, prioridad: s.prioridad })} onDoubleClick={() => verDetalle(s.id)} title="Clic: asignar · Doble clic: ver toda la info" style={{ ...box, borderLeft: `3px solid ${PRIO_HEX[pr] ?? '#E24B4A'}`, borderRadius: '0 10px 10px 0', padding: '9px 10px', marginBottom: '8px', cursor: 'pointer', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>
+                <div key={s.id} onClick={() => { if (!s.despacho?.[0]) setSel({ tipo: 'emergencia', id: s.id, prioridad: s.prioridad }); }} onDoubleClick={() => verDetalle(s.id)} title="Clic: asignar · Doble clic: ver toda la info" style={{ ...box, borderLeft: `3px solid ${PRIO_HEX[pr] ?? '#E24B4A'}`, borderRadius: '0 10px 10px 0', padding: '9px 10px', marginBottom: '8px', cursor: 'pointer', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 600, color: '#0a2540' }}>#{s.id}{mot?.codigo_radial ? ` · ${mot.codigo_radial}` : ''}</span>
                     {est && <span style={badge(ch.bg, ch.tx)}>{estLabel(est)}</span>}
                   </div>
                   <div style={{ fontSize: '12px', color: '#374151', marginTop: '2px' }}>{mot?.nombre ?? '—'}</div>
                   <div style={{ fontSize: '11px', color: '#6b7280' }}>{[s.direccion, s.barrio].filter(Boolean).join(', ') || 'sin ubicación'}</div>
+                  {asignado && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '5px' }}>
+                      <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 500 }}>🚑 {asignado}</span>
+                      {puedeReasignar(s)
+                        ? <button onClick={(e) => { e.stopPropagation(); setSel({ tipo: 'emergencia', id: s.id, prioridad: s.prioridad, despachoId: s.despacho[0].id }); }} style={{ fontSize: '10px', padding: '2px 7px' }}>Reasignar</button>
+                        : <span style={{ fontSize: '10px', color: '#9ca3af' }}>en el lugar · fijo</span>}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -172,13 +197,19 @@ export default function DespachoPage() {
               {tab.traslados.length === 0 && <div style={{ padding: '14px', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>Sin traslados en cola</div>}
               {tab.traslados.map((s: any) => {
                 const est = s.estado_solicitud?.nombre; const ch = estChip(est);
+                const asignado = movilAsignado(s);
                 return (
                   <div key={s.id} onDoubleClick={() => verDetalle(s.id)} title="Doble clic: ver toda la info · Asignar: elegir móvil" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 11px', borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
                     <span style={{ fontSize: '12px', fontWeight: 500, minWidth: '38px' }}>{hhmm(s.solicitud_traslado?.fecha_hora_traslado ?? s.created_at)}</span>
                     <span style={badge(s.tipo_solicitud_id === 3 ? '#FAEEDA' : '#E6F1FB', s.tipo_solicitud_id === 3 ? '#633806' : '#0C447C')}>{s.tipo_solicitud_id === 3 ? 'Cama·SEME' : 'Traslado'}</span>
                     <span style={{ fontSize: '12px', color: '#374151', flex: 1 }}>{s.paciente_nombre} {s.paciente_apellido} · {rutaTraslado(s)}</span>
                     {est && <span style={badge(ch.bg, ch.tx)}>{estLabel(est)}</span>}
-                    <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE' })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Asignar</button>
+                    {asignado
+                      ? <>
+                          <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 500 }}>🚑 {asignado}</span>
+                          {puedeReasignar(s) && <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE', despachoId: s.despacho[0].id })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Reasignar</button>}
+                        </>
+                      : <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE' })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Asignar</button>}
                   </div>
                 );
               })}
@@ -199,7 +230,7 @@ export default function DespachoPage() {
                     <div style={{ fontSize: '11px', color: '#9ca3af' }}>{m.base?.nombre}</div>
 
                     {sel && m.estado === 'DISPONIBLE' && (
-                      <button onClick={() => asignar(m.id)} style={{ marginTop: '6px', width: '100%', fontSize: '11px', padding: '5px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Asignar aquí</button>
+                      <button onClick={(e) => { e.stopPropagation(); asignar(m.id); }} style={{ marginTop: '6px', width: '100%', fontSize: '11px', padding: '5px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>{sel.despachoId ? 'Reasignar aquí' : 'Asignar aquí'}</button>
                     )}
 
                     {d && (
@@ -240,6 +271,7 @@ export default function DespachoPage() {
               {(() => {
                 const d: any = detalle; const se = d.solicitud_emergencia; const mot = se?.motivo_consulta;
                 const resp = d.emergencia_respuesta ?? []; const pl = d.prioridad_log ?? []; const res = pl[pl.length - 1];
+                const rgm = d.despacho?.[0]?.rol_guardia_movil;
                 return (
                   <div style={{ fontSize: '13px', color: '#374151', lineHeight: 1.7 }}>
                     <div style={{ background: '#f8f9fb', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
@@ -252,6 +284,12 @@ export default function DespachoPage() {
                       {se?.relato && <div><b>Relato:</b> {se.relato}</div>}
                       {d.observacion && <div><b>Obs.:</b> {d.observacion}</div>}
                     </div>
+                    {rgm && (
+                      <div style={{ background: '#eff6ff', border: '0.5px solid #bfdbfe', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', fontSize: '12px', color: '#1e40af' }}>
+                        <b>🚑 Asignado a:</b> {rgm.movil?.cod_movil ?? '—'}{rgm.tipo_soporte?.nombre ? ` · ${rgm.tipo_soporte.nombre}` : ''}
+                        {rgm.tripulacion?.length ? <div><b>Tripulación:</b> {rgm.tripulacion.map((t: any) => `${t.usuario?.persona?.primer_nombre ?? ''} ${t.usuario?.persona?.primer_apellido ?? ''}`.trim() + (t.funcion ? ` (${t.funcion})` : '')).join(', ')}</div> : null}
+                      </div>
+                    )}
                     {mot?.nota_seguridad && <div style={{ background: '#fff7ed', border: '0.5px solid #fed7aa', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', fontSize: '12px', color: '#7c2d12' }}><b>🛡️ Seguridad:</b> {mot.nota_seguridad}</div>}
                     {resp.length > 0 && (<div style={{ marginBottom: '10px' }}><div style={{ fontWeight: 600, color: '#0a2540', marginBottom: '4px' }}>Respuestas de recepción</div>{resp.map((r: any) => (<div key={r.id} style={{ fontSize: '12px', color: '#6b7280' }}>{r.motivo_pregunta?.texto} → <b>{r.respuesta === 'NO_SABE' ? 'No sé' : r.respuesta === 'SI' ? 'Sí' : r.respuesta === 'NO' ? 'No' : r.respuesta}</b></div>))}</div>)}
                     {d.solicitud_traslado && <div style={{ fontSize: '12px' }}><b>Traslado:</b> {d.solicitud_traslado.origen ?? '—'} → {d.solicitud_traslado.destino ?? '—'}{d.solicitud_traslado.receptor_nombre ? ` · recibe ${d.solicitud_traslado.receptor_nombre}` : ''}</div>}

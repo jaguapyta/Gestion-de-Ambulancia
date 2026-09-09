@@ -13,6 +13,7 @@ interface Catalogos { tipos_solicitud: Cat[]; tipos_servicio: Cat[]; canales: Ca
 
 interface Solicitud {
   id: number;
+  despacho?: { rol_guardia_movil: { movil: { cod_movil: string } | null } | null }[];
   denunciante_nombre: string | null;
   denunciante_telefono: string | null;
   direccion: string | null;
@@ -195,6 +196,9 @@ export default function RecepcionPage() {
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{estadoLabel(s.estado_solicitud.nombre)}</span>
+                    {s.despacho?.[0]?.rol_guardia_movil?.movil?.cod_movil && (
+                      <div style={{ fontSize: '11px', color: '#1d4ed8', marginTop: '4px' }}>🚑 {s.despacho[0].rol_guardia_movil.movil.cod_movil}</div>
+                    )}
                   </td>
                   <td style={{ padding: '12px 16px' }}>
                     <button onClick={() => verDetalle(s.id)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540' }}>Ver</button>
@@ -284,6 +288,21 @@ export default function RecepcionPage() {
               <div><strong>Paciente:</strong> {nombrePaciente(detalle)} {detalle.paciente_edad ? `· ${detalle.paciente_edad}` : ''} {detalle.paciente_documento ? `· CI ${detalle.paciente_documento}` : ''}</div>
               {detalle.observacion && <div><strong>Obs.:</strong> {detalle.observacion}</div>}
             </div>
+
+            {(detalle as any).despacho?.[0]?.rol_guardia_movil && (() => {
+              const rgm: any = (detalle as any).despacho[0].rol_guardia_movil;
+              return (
+                <div style={{ border: '0.5px solid #bfdbfe', background: '#eff6ff', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 500, color: '#1d4ed8', marginBottom: '8px' }}>🚑 Asignado a</div>
+                  <div style={{ fontSize: '13px', color: '#374151', lineHeight: 1.7 }}>
+                    <div><strong>Móvil:</strong> {rgm.movil?.cod_movil ?? '—'}{rgm.tipo_soporte?.nombre ? ` · ${rgm.tipo_soporte.nombre}` : ''}</div>
+                    {rgm.tripulacion?.length ? (
+                      <div><strong>Tripulación:</strong> {rgm.tripulacion.map((t: any) => `${t.usuario?.persona?.primer_nombre ?? ''} ${t.usuario?.persona?.primer_apellido ?? ''}`.trim() + (t.funcion ? ` (${t.funcion})` : '')).join(', ')}</div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
 
             {detalle.tipo_solicitud.nombre === 'EMERGENCIA' && (() => {
               const d: any = detalle;
