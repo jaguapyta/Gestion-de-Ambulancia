@@ -35,6 +35,9 @@ const crearTraslado = async (req, res) => {
   try {
     if (!b.paciente_dialisis_id) return res.status(400).json({ error: 'Buscá y elegí un paciente del padrón' });
     if (b.tipo !== 'IDA' && b.tipo !== 'VUELTA') return res.status(400).json({ error: 'Elegí ida o vuelta' });
+    if (b.fecha_hora_traslado && new Date(b.fecha_hora_traslado) <= new Date()) {
+      return res.status(400).json({ error: 'La fecha y hora del traslado de diálisis no puede estar en el pasado' });
+    }
 
     const pd = await prisma.paciente_dialisis.findUnique({ where: { id: int(b.paciente_dialisis_id) }, include: { persona: true } });
     if (!pd) return res.status(404).json({ error: 'Paciente no encontrado en el padrón' });

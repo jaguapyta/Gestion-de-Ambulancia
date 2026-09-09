@@ -34,6 +34,9 @@ const crearTraslado = async (req, res) => {
   try {
     if (!b.denunciante_telefono) return res.status(400).json({ error: 'El teléfono es obligatorio' });
     if (!b.tipo_servicio_id) return res.status(400).json({ error: 'Elegí el tipo de traslado' });
+    if (b.fecha_hora_traslado && new Date(b.fecha_hora_traslado) <= new Date()) {
+      return res.status(400).json({ error: 'La fecha y hora del traslado no puede estar en el pasado' });
+    }
 
     const canalId = b.canal_ingreso_id ? int(b.canal_ingreso_id) : await canalTelefonoId();
     const reqs = await prisma.tipo_requerimiento.findMany();

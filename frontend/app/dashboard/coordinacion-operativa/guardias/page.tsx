@@ -21,6 +21,12 @@ interface Guardia {
   rol_guardia_movil: any[];
 }
 
+// Compat: los registros viejos pueden tener TURNO_REGULAR / COBERTURA_ESPECIAL.
+const esEspecial = (t: string) => t === 'ESPECIAL' || t === 'COBERTURA_ESPECIAL';
+const pad = (n: number) => String(n).padStart(2, '0');
+// datetime-local usa hora local sin zona: mínimo = hoy a las 00:00 (permite la guardia en curso, bloquea días pasados).
+const hoyLocal = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00`; };
+
 export default function GuardiasPage() {
   const router = useRouter();
   const [guardias, setGuardias] = useState<Guardia[]>([]);
@@ -31,7 +37,7 @@ export default function GuardiasPage() {
   const [usuario, setUsuario] = useState<any>(null);
 
   const [form, setForm] = useState({
-    tipo: 'TURNO_REGULAR',
+    tipo: 'ESTANDAR',
     nombre: '',
     coordinador_id: '',
     fecha_inicio: '',
@@ -69,8 +75,16 @@ export default function GuardiasPage() {
       setError('Fecha inicio y fecha fin son obligatorios.');
       return;
     }
-    if (form.tipo === 'COBERTURA_ESPECIAL' && !form.nombre) {
-      setError('El nombre es obligatorio para coberturas especiales.');
+    if (form.tipo === 'ESPECIAL' && !form.nombre) {
+      setError('El nombre del evento es obligatorio para una guardia Especial.');
+      return;
+    }
+    if (new Date(form.fecha_fin) <= new Date(form.fecha_inicio)) {
+      setError('La fecha de cierre debe ser posterior a la de inicio.');
+      return;
+    }
+    if (new Date(form.fecha_fin) <= new Date()) {
+      setError('No se puede crear una guardia que ya finalizó (fecha en el pasado).');
       return;
     }
     setGuardando(true);
@@ -107,7 +121,7 @@ export default function GuardiasPage() {
     setModalAbierto(false);
     setError('');
     setForm(prev => ({
-      tipo: 'TURNO_REGULAR',
+      tipo: 'ESTANDAR',
       nombre: '',
       coordinador_id: prev.coordinador_id,
       fecha_inicio: '',
@@ -133,7 +147,7 @@ export default function GuardiasPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
           <h1 style={{ fontSize: '20px', fontWeight: '500', color: '#0a2540', margin: 0 }}>Guardias</h1>
-          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Gestión de guardias y tripulación</p>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Agrupador de móviles de guardia · la disponibilidad la define el horario de cada móvil</p>
         </div>
         <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
           + Nueva guardia
@@ -171,11 +185,11 @@ export default function GuardiasPage() {
                   <span style={{ fontSize: '15px', fontWeight: '600', color: '#0a2540' }}>{g.codigo}</span>
                   {g.nombre && <span style={{ fontSize: '13px', color: '#6b7280' }}>— {g.nombre}</span>}
                   <span style={{
-                    background: g.tipo === 'COBERTURA_ESPECIAL' ? '#fff7ed' : '#f0f4f8',
-                    color: g.tipo === 'COBERTURA_ESPECIAL' ? '#c2410c' : '#0a2540',
+                    background: esEspecial(g.tipo) ? '#fff7ed' : '#f0f4f8',
+                    color: esEspecial(g.tipo) ? '#c2410c' : '#0a2540',
                     padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '500'
                   }}>
-                    {g.tipo === 'COBERTURA_ESPECIAL' ? 'Cobertura especial' : 'Turno regular'}
+                    {esEspecial(g.tipo) ? 'Especial por evento' : 'Estándar por fecha'}
                   </span>
                   <span style={{
                     background: coloresEstado[g.estado]?.bg ?? '#f9fafb',
@@ -227,12 +241,12 @@ export default function GuardiasPage() {
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={labelStyle}>Tipo *</label>
                 <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })} style={inputStyle}>
-                  <option value="TURNO_REGULAR">Turno regular (24hs)</option>
-                  <option value="COBERTURA_ESPECIAL">Cobertura especial</option>
+                  <option value="ESTANDAR">Estándar por fecha</option>
+                  <option value="ESPECIAL">Especial por evento</option>
                 </select>
               </div>
 
-              {form.tipo === 'COBERTURA_ESPECIAL' && (
+              {form.tipo === 'ESPECIAL' && (
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={labelStyle}>Nombre del evento *</label>
                   <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: RALLY DEL CHACO 2026" style={inputStyle} />
@@ -246,12 +260,12 @@ export default function GuardiasPage() {
 
               <div>
                 <label style={labelStyle}>Fecha y hora inicio *</label>
-                <input type="datetime-local" value={form.fecha_inicio} onChange={e => setForm({ ...form, fecha_inicio: e.target.value })} style={inputStyle} />
+                <input type="datetime-local" min={hoyLocal()} value={form.fecha_inicio} onChange={e => setForm({ ...form, fecha_inicio: e.target.value })} style={inputStyle} />
               </div>
 
               <div>
                 <label style={labelStyle}>Fecha y hora fin *</label>
-                <input type="datetime-local" value={form.fecha_fin} onChange={e => setForm({ ...form, fecha_fin: e.target.value })} style={inputStyle} />
+                <input type="datetime-local" min={form.fecha_inicio || hoyLocal()} value={form.fecha_fin} onChange={e => setForm({ ...form, fecha_fin: e.target.value })} style={inputStyle} />
               </div>
 
               <div style={{ gridColumn: '1 / -1' }}>

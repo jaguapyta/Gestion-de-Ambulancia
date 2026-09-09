@@ -18,6 +18,8 @@ interface Tripulante {
 interface MovilGuardia {
   id: number;
   estado: string;
+  vigencia_inicio: string | null;
+  vigencia_fin: string | null;
   movil: { id: number; cod_movil: string; tipo: string };
   base: { id: number; nombre: string };
   tipo_soporte: { id: number; nombre: string };
@@ -38,6 +40,18 @@ interface Guardia {
 }
 
 const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+const pad = (n: number) => String(n).padStart(2, '0');
+// ISO -> valor de <input datetime-local> ('YYYY-MM-DDTHH:mm') en hora local.
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const hoyLocal = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00`; };
+const fmtRango = (a?: string | null, b?: string | null) => (a && b)
+  ? `${new Date(a).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} → ${new Date(b).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+  : 'sin horario';
 
 export default function GuardiaDetallePage() {
   const { id } = useParams();
@@ -60,7 +74,7 @@ export default function GuardiaDetallePage() {
   const [diaSemana, setDiaSemana] = useState<number>(0);
   const [cargandoPersonal, setCargandoPersonal] = useState(false);
 
-  const [formMovil, setFormMovil] = useState({ vehiculo_id: '', base_id: '', tipo_soporte_id: '' });
+  const [formMovil, setFormMovil] = useState({ vehiculo_id: '', base_id: '', tipo_soporte_id: '', vigencia_inicio: '', vigencia_fin: '' });
   const [formTripulante, setFormTripulante] = useState({ usuario_id: '', funcion: 'PARAMÉDICO' });
 
   const token = () => localStorage.getItem('token') ?? '';
@@ -76,9 +90,10 @@ export default function GuardiaDetallePage() {
       .finally(() => setCargando(false));
   };
 
-  const cargarPersonalDisponible = () => {
+  // El personal disponible se calcula para el HORARIO del móvil (respeta la superposición).
+  const cargarPersonalDisponible = (movilId: number) => {
     setCargandoPersonal(true);
-    fetch(`http://localhost:3001/api/guardias/${id}/personal-disponible`, {
+    fetch(`http://localhost:3001/api/guardias/${id}/personal-disponible?movil_id=${movilId}`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -107,17 +122,37 @@ export default function GuardiaDetallePage() {
       ]));
   }, [id]);
 
+  // Al abrir "Agregar móvil" se prellena la vigencia con el rango de la guardia (editable).
+  const abrirModalMovil = () => {
+    setFormMovil({
+      vehiculo_id: '', base_id: '', tipo_soporte_id: '',
+      vigencia_inicio: toLocalInput(guardia?.fecha_inicio),
+      vigencia_fin: toLocalInput(guardia?.fecha_fin),
+    });
+    setError('');
+    setModalMovil(true);
+  };
+
   const handleAbrirTripulante = (movilId: number) => {
     setMovilSeleccionado(movilId);
     setFormTripulante({ usuario_id: '', funcion: 'PARAMÉDICO' });
     setError('');
-    cargarPersonalDisponible();
+    cargarPersonalDisponible(movilId);
     setModalTripulante(true);
   };
 
   const agregarMovil = async () => {
     if (!formMovil.vehiculo_id || !formMovil.base_id || !formMovil.tipo_soporte_id) {
-      setError('Todos los campos son obligatorios'); return;
+      setError('Móvil, base y tipo de soporte son obligatorios'); return;
+    }
+    if (!formMovil.vigencia_inicio || !formMovil.vigencia_fin) {
+      setError('Cargá la fecha/hora de inicio y de cierre del móvil'); return;
+    }
+    if (new Date(formMovil.vigencia_fin) <= new Date(formMovil.vigencia_inicio)) {
+      setError('El cierre debe ser posterior al inicio'); return;
+    }
+    if (new Date(formMovil.vigencia_fin) <= new Date()) {
+      setError('El horario del móvil no puede estar en el pasado'); return;
     }
     setGuardando(true); setError('');
     try {
@@ -129,7 +164,7 @@ export default function GuardiaDetallePage() {
       if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Error'); return; }
       cargarGuardia();
       setModalMovil(false);
-      setFormMovil({ vehiculo_id: '', base_id: '', tipo_soporte_id: '' });
+      setFormMovil({ vehiculo_id: '', base_id: '', tipo_soporte_id: '', vigencia_inicio: '', vigencia_fin: '' });
     } catch { setError('Error de conexión'); }
     finally { setGuardando(false); }
   };
@@ -222,7 +257,7 @@ export default function GuardiaDetallePage() {
           </p>
         </div>
         {puedeEditar && (
-          <button onClick={() => setModalMovil(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+          <button onClick={abrirModalMovil} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
             + Agregar móvil
           </button>
         )}
@@ -243,6 +278,9 @@ export default function GuardiaDetallePage() {
                   <span style={{ fontSize: '13px', color: '#6b7280' }}>📍 {m.base.nombre}</span>
                   <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '500' }}>
                     {m.tipo_soporte.nombre}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#374151', background: '#f0f4f8', padding: '2px 10px', borderRadius: '20px' }}>
+                    ⏰ {fmtRango(m.vigencia_inicio, m.vigencia_fin)}
                   </span>
                   <span style={{
                     background: coloresEstado[m.estado]?.bg ?? '#f9fafb',
@@ -311,7 +349,7 @@ export default function GuardiaDetallePage() {
       {/* Modal agregar móvil */}
       {modalMovil && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
-          <div style={{ background: 'white', borderRadius: '12px', padding: '28px', width: '460px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+          <div style={{ background: 'white', borderRadius: '12px', padding: '28px', width: '480px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
             <h2 style={{ fontSize: '16px', fontWeight: '500', color: '#0a2540', margin: '0 0 20px' }}>Agregar móvil a la guardia</h2>
             {error && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '10px 14px', borderRadius: '7px', fontSize: '13px', marginBottom: '16px' }}>{error}</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -336,6 +374,19 @@ export default function GuardiaDetallePage() {
                   {tiposSoporte.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                 </select>
               </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={labelStyle}>Inicio (fecha y hora) *</label>
+                  <input type="datetime-local" min={hoyLocal()} value={formMovil.vigencia_inicio} onChange={e => setFormMovil({ ...formMovil, vigencia_inicio: e.target.value })} style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Cierre (fecha y hora) *</label>
+                  <input type="datetime-local" min={formMovil.vigencia_inicio || hoyLocal()} value={formMovil.vigencia_fin} onChange={e => setFormMovil({ ...formMovil, vigencia_fin: e.target.value })} style={inputStyle} />
+                </div>
+              </div>
+              <div style={{ fontSize: '11px', color: '#9ca3af' }}>
+                Fuera de este horario el móvil no aparece en Despacho. El cierre es exclusivo: 06:00 → 06:00 no se superpone con el turno que arranca 06:00.
+              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
               <button onClick={() => { setModalMovil(false); setError(''); }} style={{ padding: '9px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cancelar</button>
@@ -354,7 +405,7 @@ export default function GuardiaDetallePage() {
             <h2 style={{ fontSize: '16px', fontWeight: '500', color: '#0a2540', margin: '0 0 8px' }}>Agregar tripulante</h2>
             {diaSemana > 0 && (
               <div style={{ background: '#eff6ff', border: '0.5px solid #bfdbfe', borderRadius: '7px', padding: '8px 12px', marginBottom: '16px', fontSize: '12px', color: '#1d4ed8' }}>
-                📅 Mostrando personal disponible para el día <strong>{DIAS[diaSemana]}</strong>
+                📅 Personal disponible para el horario del móvil (día <strong>{DIAS[diaSemana]}</strong>), sin superposición de turnos.
               </div>
             )}
             {error && <div style={{ background: '#fef2f2', color: '#dc2626', padding: '10px 14px', borderRadius: '7px', fontSize: '13px', marginBottom: '16px' }}>{error}</div>}
@@ -372,10 +423,10 @@ export default function GuardiaDetallePage() {
                   <option value="">Seleccionar personal...</option>
                   {personalDisponible
                     .filter(u => {
-                      // Se puede tripular según la HABILITACIÓN, no el rol base:
-                      // un paramédico habilitado para conducir es candidato a conductor.
-                      if (formTripulante.funcion === 'CONDUCTOR') return u.conductor_habilitado_usuario?.length > 0;
-                      if (formTripulante.funcion === 'PARAMÉDICO') return u.paramedico_habilitado_usuario?.length > 0;
+                      // Se tripula según la HABILITACIÓN. Estas relaciones son 1-1 (objeto o null),
+                      // NO listas: hay que chequear existencia (!!), no .length.
+                      if (formTripulante.funcion === 'CONDUCTOR') return !!u.conductor_habilitado_usuario;
+                      if (formTripulante.funcion === 'PARAMÉDICO') return !!u.paramedico_habilitado_usuario;
                       return true;
                     })
                     .map(u => {
@@ -389,7 +440,7 @@ export default function GuardiaDetallePage() {
                 </select>
                 {!cargandoPersonal && personalDisponible.length === 0 && (
                   <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '6px' }}>
-                    ⚠️ No hay personal disponible para el día {DIAS[diaSemana]}
+                    ⚠️ No hay personal disponible para ese horario
                   </div>
                 )}
               </div>

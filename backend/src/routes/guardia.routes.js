@@ -15,6 +15,7 @@ router.post('/', auth, roles('COORDINADOR_OPERATIVO', 'ADMINISTRADOR'), crearGua
 router.patch('/:id/estado', auth, roles('COORDINADOR_OPERATIVO', 'ADMINISTRADOR'), cambiarEstado);
 router.post('/:id/movil', auth, roles('COORDINADOR_OPERATIVO', 'ADMINISTRADOR'), agregarMovil);
 router.post('/movil/:movil_id/tripulante', auth, roles('COORDINADOR_OPERATIVO', 'ADMINISTRADOR'), agregarTripulante);
-router.patch('/movil/:movil_id/estado', auth, roles('COORDINADOR_OPERATIVO', 'ADMINISTRADOR'), actualizarEstadoMovil);
+// Sacar de servicio un móvil durante la guardia: solo Coordinación Operativa.
+router.patch('/movil/:movil_id/estado', auth, roles('COORDINADOR_OPERATIVO'), actualizarEstadoMovil);
 
 module.exports = router;
