@@ -245,6 +245,8 @@ model rol_guardia_movil {
   base_id         Int             @db.UnsignedTinyInt
   tipo_soporte_id Int             @db.UnsignedTinyInt
   estado          String          @default("DISPONIBLE") @db.VarChar(20)
+  vigencia_inicio DateTime?       @db.DateTime(0)
+  vigencia_fin    DateTime?       @db.DateTime(0)
   latitud         Decimal?        @db.Decimal(10, 7)
   longitud        Decimal?        @db.Decimal(10, 7)
   activo          Boolean         @default(true)

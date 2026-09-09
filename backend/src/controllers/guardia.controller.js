@@ -1,6 +1,15 @@
 const prisma = require('../config/db');
 const { exigeVigencia, comoParamedico, comoConductor, aptoPara } = require('../services/habilitaciones');
 
+// Tipos de rol de guardia. El rol es solo un AGRUPADOR; la disponibilidad la da la vigencia del móvil.
+// Se aceptan los valores viejos por compatibilidad y se normalizan a los nuevos.
+const TIPOS_GUARDIA = {
+  ESTANDAR: 'ESTANDAR', ESPECIAL: 'ESPECIAL',
+  TURNO_REGULAR: 'ESTANDAR', COBERTURA_ESPECIAL: 'ESPECIAL',
+};
+
+const parseFecha = (v) => { if (!v) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d; };
+
 const getGuardias = async (req, res) => {
   try {
     const guardias = await prisma.rol_guardia.findMany({
@@ -81,6 +90,15 @@ const getGuardiaById = async (req, res) => {
 const crearGuardia = async (req, res) => {
   const { tipo, nombre, coordinador_id, fecha_inicio, fecha_fin, observacion } = req.body;
   try {
+    const tipoNorm = TIPOS_GUARDIA[tipo];
+    if (!tipoNorm) return res.status(400).json({ error: 'Tipo de guardia inválido (Estándar por fecha o Especial por evento)' });
+    if (tipoNorm === 'ESPECIAL' && !nombre) return res.status(400).json({ error: 'El nombre del evento es obligatorio para una guardia Especial' });
+
+    const ini = parseFecha(fecha_inicio), fin = parseFecha(fecha_fin);
+    if (!ini || !fin) return res.status(400).json({ error: 'Fecha de inicio y fecha de cierre son obligatorias' });
+    if (fin <= ini) return res.status(400).json({ error: 'La fecha de cierre debe ser posterior a la de inicio' });
+    if (fin <= new Date()) return res.status(400).json({ error: 'No se puede crear una guardia que ya finalizó (fecha en el pasado)' });
+
     // Generar código
     const ultima = await prisma.rol_guardia.findFirst({ orderBy: { id: 'desc' } });
     const numero = ultima ? parseInt(ultima.codigo.split('-')[1]) + 1 : 1;
@@ -89,11 +107,11 @@ const crearGuardia = async (req, res) => {
     const guardia = await prisma.rol_guardia.create({
       data: {
         codigo,
-        tipo,
+        tipo: tipoNorm,
         nombre: nombre || null,
         coordinador_id: parseInt(coordinador_id),
-        fecha_inicio: new Date(fecha_inicio),
-        fecha_fin: new Date(fecha_fin),
+        fecha_inicio: ini,
+        fecha_fin: fin,
         observacion: observacion || null,
         estado: 'PLANIFICADO'
       }
@@ -122,25 +140,40 @@ const cambiarEstado = async (req, res) => {
 
 const agregarMovil = async (req, res) => {
   const { id } = req.params;
-  const { vehiculo_id, base_id, tipo_soporte_id } = req.body;
+  const { vehiculo_id, base_id, tipo_soporte_id, vigencia_inicio, vigencia_fin } = req.body;
   try {
-    // Verificar que el móvil no esté ya en esta guardia
-    const yaAsignado = await prisma.rol_guardia_movil.findFirst({
+    const vId = parseInt(vehiculo_id);
+    const ini = parseFecha(vigencia_inicio), fin = parseFecha(vigencia_fin);
+    if (!vId || !base_id || !tipo_soporte_id) return res.status(400).json({ error: 'Móvil, base y tipo de soporte son obligatorios' });
+    if (!ini || !fin) return res.status(400).json({ error: 'La fecha/hora de inicio y de cierre del móvil son obligatorias' });
+    if (fin <= ini) return res.status(400).json({ error: 'La fecha/hora de cierre debe ser posterior a la de inicio' });
+    if (fin <= new Date()) return res.status(400).json({ error: 'No se puede programar un móvil con horario ya vencido (fecha en el pasado)' });
+
+    // Superposición del vehículo: ventana semiabierta [inicio, fin).
+    // Cruzan si (existente.inicio < nueva.fin) Y (existente.fin > nueva.inicio).
+    const cruce = await prisma.rol_guardia_movil.findFirst({
       where: {
-        rol_guardia_id: parseInt(id),
-        vehiculo_id: parseInt(vehiculo_id)
-      }
+        vehiculo_id: vId,
+        activo: true,
+        vigencia_inicio: { lt: fin },
+        vigencia_fin: { gt: ini },
+      },
+      include: { movil: true, rol_guardia: true },
     });
-    if (yaAsignado) {
-      return res.status(400).json({ error: 'Este móvil ya está asignado a esta guardia' });
+    if (cruce) {
+      return res.status(409).json({
+        error: `El móvil ${cruce.movil?.cod_movil ?? ''} ya está de guardia entre ${new Date(cruce.vigencia_inicio).toLocaleString('es-PY')} y ${new Date(cruce.vigencia_fin).toLocaleString('es-PY')} (guardia ${cruce.rol_guardia?.codigo ?? ''}). Hay superposición horaria.`
+      });
     }
 
     const movilGuardia = await prisma.rol_guardia_movil.create({
       data: {
         rol_guardia_id: parseInt(id),
-        vehiculo_id: parseInt(vehiculo_id),
+        vehiculo_id: vId,
         base_id: parseInt(base_id),
         tipo_soporte_id: parseInt(tipo_soporte_id),
+        vigencia_inicio: ini,
+        vigencia_fin: fin,
         estado: 'DISPONIBLE'
       },
       include: {
@@ -160,9 +193,14 @@ const agregarTripulante = async (req, res) => {
   const { movil_id } = req.params;
   const { usuario_id, funcion } = req.body;
   try {
+    const mId = parseInt(movil_id), uId = parseInt(usuario_id);
+
+    const movil = await prisma.rol_guardia_movil.findUnique({ where: { id: mId } });
+    if (!movil) return res.status(404).json({ error: 'Móvil de guardia no encontrado' });
+
     // Verificar límites de tripulación
     const tripulacionActual = await prisma.tripulacion.findMany({
-      where: { rol_guardia_movil_id: parseInt(movil_id) }
+      where: { rol_guardia_movil_id: mId }
     });
 
     const conductores = tripulacionActual.filter(t => t.funcion === 'CONDUCTOR');
@@ -177,16 +215,38 @@ const agregarTripulante = async (req, res) => {
     }
 
     // Verificar que el usuario no esté ya en este móvil
-    const yaAsignado = tripulacionActual.find(t => t.usuario_id === parseInt(usuario_id));
+    const yaAsignado = tripulacionActual.find(t => t.usuario_id === uId);
     if (yaAsignado) {
       return res.status(400).json({ error: 'Este funcionario ya está asignado a este móvil' });
+    }
+
+    // Superposición horaria del funcionario en OTRO móvil (semiabierta [inicio, fin)).
+    if (movil.vigencia_inicio && movil.vigencia_fin) {
+      const cruce = await prisma.tripulacion.findFirst({
+        where: {
+          usuario_id: uId,
+          activo: true,
+          rol_guardia_movil_id: { not: mId },
+          rol_guardia_movil: {
+            activo: true,
+            vigencia_inicio: { lt: movil.vigencia_fin },
+            vigencia_fin: { gt: movil.vigencia_inicio },
+          },
+        },
+        include: { rol_guardia_movil: { include: { movil: true } } },
+      });
+      if (cruce) {
+        return res.status(409).json({
+          error: `El funcionario ya está asignado al móvil ${cruce.rol_guardia_movil?.movil?.cod_movil ?? ''} en un horario que se superpone. No puede tripular dos móviles a la vez.`
+        });
+      }
     }
 
     // Nadie sube a un móvil sin la habilitación vigente para la función que va a
     // cumplir. Se valida acá porque es el único punto donde se conoce la función.
     if (await exigeVigencia()) {
       const funcionario = await prisma.usuario.findUnique({
-        where: { id: parseInt(usuario_id) },
+        where: { id: uId },
         include: {
           persona: true,
           paramedico_habilitado_usuario: true,
@@ -205,8 +265,8 @@ const agregarTripulante = async (req, res) => {
 
     const tripulante = await prisma.tripulacion.create({
       data: {
-        rol_guardia_movil_id: parseInt(movil_id),
-        usuario_id: parseInt(usuario_id),
+        rol_guardia_movil_id: mId,
+        usuario_id: uId,
         funcion,
         activo: true
       },
@@ -238,28 +298,40 @@ const actualizarEstadoMovil = async (req, res) => {
 
 const getPersonalDisponible = async (req, res) => {
   const { guardia_id } = req.params;
+  const movilId = req.query.movil_id ? parseInt(req.query.movil_id) : null;
   try {
     const guardia = await prisma.rol_guardia.findUnique({
       where: { id: parseInt(guardia_id) }
     });
     if (!guardia) return res.status(404).json({ error: 'Guardia no encontrada' });
 
-    const fecha = new Date(guardia.fecha_inicio);
-    const diaSemana = fecha.getDay() === 0 ? 7 : fecha.getDay();
+    // Ventana de disponibilidad: la del MÓVIL si se indica, si no la del rol.
+    let ini = new Date(guardia.fecha_inicio);
+    let fin = new Date(guardia.fecha_fin);
+    if (movilId) {
+      const mv = await prisma.rol_guardia_movil.findUnique({ where: { id: movilId } });
+      if (mv?.vigencia_inicio && mv?.vigencia_fin) { ini = new Date(mv.vigencia_inicio); fin = new Date(mv.vigencia_fin); }
+    }
+    const diaSemana = ini.getDay() === 0 ? 7 : ini.getDay();
 
-    // Funcionarios ya asignados a algún móvil de esta guardia
-    const movilesGuardia = await prisma.rol_guardia_movil.findMany({
-      where: { rol_guardia_id: parseInt(guardia_id) },
-      include: { tripulacion: true }
+    // Funcionarios con tripulación en cualquier móvil cuyo horario se superponga
+    // con esta ventana -> no disponibles (evita superposición de personal).
+    const movilesSuperpuestos = await prisma.rol_guardia_movil.findMany({
+      where: {
+        activo: true,
+        vigencia_inicio: { lt: fin },
+        vigencia_fin: { gt: ini },
+      },
+      include: { tripulacion: { where: { activo: true } } },
     });
-    const usuariosEnGuardia = movilesGuardia.flatMap(m => m.tripulacion.map(t => t.usuario_id));
+    const usuariosOcupados = movilesSuperpuestos.flatMap(m => m.tripulacion.map(t => t.usuario_id));
 
-    // Estados temporales vigentes que se solapan con el rango de la guardia
+    // Estados temporales vigentes que se solapan con el rango
     const estados = await prisma.estado_temporal_personal.findMany({
       where: {
         activo: true,
-        fecha_inicio: { lte: new Date(guardia.fecha_fin) },
-        fecha_fin: { gte: new Date(guardia.fecha_inicio) }
+        fecha_inicio: { lte: fin },
+        fecha_fin: { gte: ini }
       },
       include: { usuario: { include: { persona: true } } }
     });
@@ -281,7 +353,7 @@ const getPersonalDisponible = async (req, res) => {
       }
     }
 
-    const excluidos = [...new Set([...usuariosEnGuardia, ...idsNoDisponibles])];
+    const excluidos = [...new Set([...usuariosOcupados, ...idsNoDisponibles])];
 
     const exigir = await exigeVigencia();
 

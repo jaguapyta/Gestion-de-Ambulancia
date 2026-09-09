@@ -21,6 +21,14 @@ const puedeReasignar = (s: any): boolean => {
 };
 const movilAsignado = (s: any): string | null => s.despacho?.[0]?.rol_guardia_movil?.movil?.cod_movil ?? null;
 
+// Tripulación ordenada (conductor primero) con etiqueta de función.
+const tripLista = (m: any) => [...(m.tripulacion ?? [])]
+  .sort((a: any, b: any) => (String(a.funcion).includes('COND') ? 0 : 1) - (String(b.funcion).includes('COND') ? 0 : 1))
+  .map((t: any) => ({
+    fx: String(t.funcion).includes('COND') ? '🚙 Conductor' : String(t.funcion).includes('PARAM') ? '⚕️ Paramédico' : (t.funcion ?? ''),
+    nom: `${t.usuario?.persona?.primer_nombre ?? ''} ${t.usuario?.persona?.primer_apellido ?? ''}`.trim() || '—',
+  }));
+
 export default function DespachoPage() {
   const [tab, setTab] = useState<any>({ emergencias: [], traslados: [], moviles: [] });
   const [cat, setCat] = useState<any>({ estados_despacho: [], condiciones_cierre: [] });
@@ -29,6 +37,9 @@ export default function DespachoPage() {
   const [cond, setCond] = useState('');
   const [msg, setMsg] = useState('');
   const [detalle, setDetalle] = useState<any>(null);
+  const [verHist, setVerHist] = useState(false);
+  const [hist, setHist] = useState<any[]>([]);
+  const [verRol, setVerRol] = useState(false);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<any>(null);
@@ -79,12 +90,19 @@ export default function DespachoPage() {
     const movilIcon = (color: string, cod: string) => L.divIcon({ className: '', iconSize: [30, 18], iconAnchor: [15, 9], html: `<div style="background:${color};color:#fff;font-size:9px;font-weight:600;border:2px solid #fff;border-radius:4px;padding:1px 3px;box-shadow:0 1px 3px rgba(0,0,0,.4);text-align:center;">${cod}</div>` });
     const pinIcon = (color: string) => L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 20], html: `<div style="background:${color};width:18px;height:18px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);"></div>` });
 
+    // Lista de tripulación para el popup del mapa: conductor primero, luego paramédico/s.
+    const tripHtml = (m: any) => {
+      const lista = tripLista(m);
+      if (lista.length === 0) return '<i>sin tripulación asignada</i>';
+      return lista.map(t => `${t.fx}: ${t.nom}`).join('<br>');
+    };
+
     markersMov.current = {};
     tab.moviles.forEach((m: any) => {
       const lat = m.latitud ?? m.base?.latitud, lng = m.longitud ?? m.base?.longitud;
       if (lat == null || lng == null) return;
       const mk = L.marker([Number(lat), Number(lng)], { icon: movilIcon(estadoMovilColor(m.estado), m.movil?.cod_movil ?? '?') })
-        .bindPopup(`<b>${m.movil?.cod_movil ?? ''}</b> · ${m.tipo_soporte?.nombre ?? ''}<br>${m.estado} · ${m.base?.nombre ?? ''}<br>Tripulación: ${m.tripulacion?.length ?? 0}`)
+        .bindPopup(`<b>${m.movil?.cod_movil ?? ''}</b> · ${m.tipo_soporte?.nombre ?? ''}<br>${m.estado} · ${m.base?.nombre ?? ''}<br><b>Tripulación (${m.tripulacion?.length ?? 0}):</b><br>${tripHtml(m)}`)
         .addTo(layer.current);
       markersMov.current[m.id] = mk;
     });
@@ -132,6 +150,11 @@ export default function DespachoPage() {
     if (res.ok) { setCerrando(null); setCond(''); cargar(); }
   };
 
+  const abrirHistorial = async () => {
+    const r = await fetch('http://localhost:3001/api/despacho/historial', { headers: headers() });
+    if (r.ok) { setHist(await r.json()); setVerHist(true); }
+  };
+
   const box = { background: 'var(--surface-2, #fff)', border: '0.5px solid #e5e7eb', borderRadius: '10px' } as const;
   const badge = (bg: string, c: string): React.CSSProperties => ({ background: bg, color: c, fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '20px' });
 
@@ -139,14 +162,41 @@ export default function DespachoPage() {
     ? `${s.solicitud_ref_cama?.centro_solicitante ?? '—'} → ${s.regulacion_cama?.hospital_destino ?? '—'}`
     : `${s.solicitud_traslado?.origen ?? '—'} → ${s.solicitud_traslado?.destino ?? '—'}`;
 
+  // Controles de avance de estado del servicio en curso (usados en tarjetas y filas).
+  const controlesEstado = (d: any) => {
+    if (!d) return null;
+    if (cerrando?.despachoId === d.id) {
+      return (
+        <div style={{ marginTop: '4px', display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+          <select value={cond} onChange={e => setCond(e.target.value)} style={{ flex: 1, fontSize: '11px', padding: '3px' }}>
+            <option value="">Motivo…</option>{cat.condiciones_cierre.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+          <button onClick={() => cond && avanzar(d.id, cerrando.estado, cond)} style={{ fontSize: '11px', padding: '3px 7px' }}>OK</button>
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+        {d.estado_despacho_id === 1 && <button onClick={() => avanzar(d.id, 2)} style={{ fontSize: '10px', padding: '3px 7px' }}>En escena</button>}
+        {d.estado_despacho_id === 2 && <button onClick={() => avanzar(d.id, 3)} style={{ fontSize: '10px', padding: '3px 7px' }}>Trasladando</button>}
+        {d.estado_despacho_id === 3 && <button onClick={() => setCerrando({ despachoId: d.id, estado: 4 })} style={{ fontSize: '10px', padding: '3px 7px', background: '#15803d', color: '#fff', border: 'none', borderRadius: '5px' }}>Finalizar</button>}
+        <button onClick={() => setCerrando({ despachoId: d.id, estado: 5 })} style={{ fontSize: '10px', padding: '3px 7px', color: '#b91c1c' }}>Cancelar</button>
+      </div>
+    );
+  };
+
+  const disponibles = tab.moviles.filter((m: any) => m.estado === 'DISPONIBLE');
+
   return (
     <ProtectedRoute rolesPermitidos={DESP}>
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
           <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Despacho</h1>
-          <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '14px' }}>
+          <div style={{ fontSize: '12px', color: '#6b7280', display: 'flex', gap: '14px', alignItems: 'center' }}>
             <span>{tab.emergencias.length + tab.traslados.length} en cola</span>
-            <span style={{ color: '#15803d' }}>{tab.moviles.filter((m: any) => m.estado === 'DISPONIBLE').length} libres</span>
+            <span style={{ color: '#15803d' }}>{disponibles.length} libres</span>
+            <button onClick={() => setVerRol(true)} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', color: '#0a2540' }}>🚑 Rol de guardia</button>
+            <button onClick={abrirHistorial} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', color: '#0a2540' }}>🗂️ Históricos</button>
           </div>
         </div>
         {sel && <div style={{ background: '#eff6ff', color: '#1e40af', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', margin: '8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -181,6 +231,7 @@ export default function DespachoPage() {
                         : <span style={{ fontSize: '10px', color: '#9ca3af' }}>en el lugar · fijo</span>}
                     </div>
                   )}
+                  {controlesEstado(s.despacho?.[0])}
                 </div>
               );
             })}
@@ -199,17 +250,20 @@ export default function DespachoPage() {
                 const est = s.estado_solicitud?.nombre; const ch = estChip(est);
                 const asignado = movilAsignado(s);
                 return (
-                  <div key={s.id} onDoubleClick={() => verDetalle(s.id)} title="Doble clic: ver toda la info · Asignar: elegir móvil" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 11px', borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 500, minWidth: '38px' }}>{hhmm(s.solicitud_traslado?.fecha_hora_traslado ?? s.created_at)}</span>
-                    <span style={badge(s.tipo_solicitud_id === 3 ? '#FAEEDA' : '#E6F1FB', s.tipo_solicitud_id === 3 ? '#633806' : '#0C447C')}>{s.tipo_solicitud_id === 3 ? 'Cama·SEME' : 'Traslado'}</span>
-                    <span style={{ fontSize: '12px', color: '#374151', flex: 1 }}>{s.paciente_nombre} {s.paciente_apellido} · {rutaTraslado(s)}</span>
-                    {est && <span style={badge(ch.bg, ch.tx)}>{estLabel(est)}</span>}
-                    {asignado
-                      ? <>
-                          <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 500 }}>🚑 {asignado}</span>
-                          {puedeReasignar(s) && <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE', despachoId: s.despacho[0].id })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Reasignar</button>}
-                        </>
-                      : <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE' })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Asignar</button>}
+                  <div key={s.id} onDoubleClick={() => verDetalle(s.id)} title="Doble clic: ver toda la info · Asignar: elegir móvil" style={{ padding: '8px 11px', borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 500, minWidth: '38px' }}>{hhmm(s.solicitud_traslado?.fecha_hora_traslado ?? s.created_at)}</span>
+                      <span style={badge(s.tipo_solicitud_id === 3 ? '#FAEEDA' : '#E6F1FB', s.tipo_solicitud_id === 3 ? '#633806' : '#0C447C')}>{s.tipo_solicitud_id === 3 ? 'Cama·SEME' : 'Traslado'}</span>
+                      <span style={{ fontSize: '12px', color: '#374151', flex: 1 }}>{s.paciente_nombre} {s.paciente_apellido} · {rutaTraslado(s)}</span>
+                      {est && <span style={badge(ch.bg, ch.tx)}>{estLabel(est)}</span>}
+                      {asignado
+                        ? <>
+                            <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 500 }}>🚑 {asignado}</span>
+                            {puedeReasignar(s) && <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE', despachoId: s.despacho[0].id })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Reasignar</button>}
+                          </>
+                        : <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE' })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Asignar</button>}
+                    </div>
+                    {s.despacho?.[0] && controlesEstado(s.despacho[0])}
                   </div>
                 );
               })}
@@ -217,49 +271,95 @@ export default function DespachoPage() {
           </div>
 
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280', marginBottom: '6px' }}>Móviles</div>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: '#6b7280', marginBottom: '6px' }}>Móviles disponibles</div>
             <div style={{ ...box, overflow: 'hidden' }}>
-              {tab.moviles.map((m: any) => {
-                const d = m.despacho?.[0];
-                return (
-                  <div key={m.id} onClick={() => localizar(m)} title="Clic: ver su ubicación en el mapa" style={{ padding: '9px 10px', borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 500, color: m.estado === 'DISPONIBLE' ? '#0a2540' : '#6b7280' }}>📍 {m.movil?.cod_movil} · {m.tipo_soporte?.nombre}</span>
-                      <span style={badge(m.estado === 'DISPONIBLE' ? '#EAF3DE' : '#FAEEDA', m.estado === 'DISPONIBLE' ? '#173404' : '#633806')}>{m.estado === 'DISPONIBLE' ? 'Libre' : 'Ocupado'}</span>
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>{m.base?.nombre}</div>
-
-                    {sel && m.estado === 'DISPONIBLE' && (
-                      <button onClick={(e) => { e.stopPropagation(); asignar(m.id); }} style={{ marginTop: '6px', width: '100%', fontSize: '11px', padding: '5px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>{sel.despachoId ? 'Reasignar aquí' : 'Asignar aquí'}</button>
-                    )}
-
-                    {d && (
-                      <div style={{ marginTop: '6px' }}>
-                        <div style={{ fontSize: '11px', color: '#6b7280' }}>Viaje #{d.solicitud_id} · {d.estado_despacho?.nombre}</div>
-                        {cerrando?.despachoId === d.id ? (
-                          <div style={{ marginTop: '4px', display: 'flex', gap: '4px' }}>
-                            <select value={cond} onChange={e => setCond(e.target.value)} style={{ flex: 1, fontSize: '11px', padding: '3px' }}>
-                              <option value="">Motivo…</option>{cat.condiciones_cierre.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                            </select>
-                            <button onClick={() => cond && avanzar(d.id, cerrando.estado, cond)} style={{ fontSize: '11px', padding: '3px 7px' }}>OK</button>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
-                            {d.estado_despacho_id === 1 && <button onClick={() => avanzar(d.id, 2)} style={{ fontSize: '10px', padding: '3px 7px' }}>En escena</button>}
-                            {d.estado_despacho_id === 2 && <button onClick={() => avanzar(d.id, 3)} style={{ fontSize: '10px', padding: '3px 7px' }}>Trasladando</button>}
-                            {d.estado_despacho_id === 3 && <button onClick={() => setCerrando({ despachoId: d.id, estado: 4 })} style={{ fontSize: '10px', padding: '3px 7px', background: '#15803d', color: '#fff', border: 'none', borderRadius: '5px' }}>Finalizar</button>}
-                            <button onClick={() => setCerrando({ despachoId: d.id, estado: 5 })} style={{ fontSize: '10px', padding: '3px 7px', color: '#b91c1c' }}>Cancelar</button>
-                          </div>
-                        )}
-                      </div>
-                    )}
+              {disponibles.length === 0 && <div style={{ padding: '14px', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>Sin móviles disponibles</div>}
+              {disponibles.map((m: any) => (
+                <div key={m.id} onClick={() => localizar(m)} title="Clic: ver su ubicación en el mapa" style={{ padding: '9px 10px', borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: '#0a2540' }}>📍 {m.movil?.cod_movil} · {m.tipo_soporte?.nombre}</span>
+                    <span style={badge('#EAF3DE', '#173404')}>Libre</span>
                   </div>
-                );
-              })}
+                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>{m.base?.nombre} · {m.tripulacion?.length ?? 0} tripulante(s)</div>
+                  {sel && (
+                    <button onClick={(e) => { e.stopPropagation(); asignar(m.id); }} style={{ marginTop: '6px', width: '100%', fontSize: '11px', padding: '5px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>{sel.despachoId ? 'Reasignar aquí' : 'Asignar aquí'}</button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
         </div>
+
+        {verRol && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '24px' }}>
+            <div style={{ background: 'white', borderRadius: '12px', padding: '24px', width: '760px', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,.15)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#0a2540', margin: 0 }}>🚑 Rol de guardia</h2>
+                <button onClick={() => setVerRol(false)} style={{ background: 'transparent', border: 'none', fontSize: '20px', color: '#9ca3af', cursor: 'pointer' }}>×</button>
+              </div>
+              <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 12px' }}>
+                Móviles de guardia: {tab.moviles.length} · <span style={{ color: '#15803d' }}>{disponibles.length} libres</span> · <span style={{ color: '#BA7517' }}>{tab.moviles.filter((m: any) => m.estado === 'OCUPADO').length} ocupados</span>
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {tab.moviles.length === 0 && <div style={{ fontSize: '12px', color: '#9ca3af' }}>Sin móviles de guardia</div>}
+                {tab.moviles.map((m: any) => {
+                  const trip = tripLista(m);
+                  const bg = m.estado === 'DISPONIBLE' ? '#EAF3DE' : m.estado === 'OCUPADO' ? '#FAEEDA' : '#eef0f2';
+                  const tx = m.estado === 'DISPONIBLE' ? '#173404' : m.estado === 'OCUPADO' ? '#633806' : '#555';
+                  return (
+                    <div key={m.id} style={{ ...box, padding: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#0a2540' }}>{m.movil?.cod_movil ?? '—'} · {m.tipo_soporte?.nombre ?? ''}</span>
+                        <span style={badge(bg, tx)}>{m.estado}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '6px' }}>🏠 {m.base?.nombre ?? 'sin base'}</div>
+                      <div style={{ fontSize: '12px', color: '#374151' }}>
+                        {trip.length ? trip.map((t, i) => <div key={i}>{t.fx}: {t.nom}</div>) : <span style={{ color: '#9ca3af' }}>sin tripulación asignada</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', borderTop: '0.5px solid #f0f0f0', paddingTop: '12px' }}>
+                <button onClick={() => setVerRol(false)} style={{ padding: '8px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {verHist && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '24px' }}>
+            <div style={{ background: 'white', borderRadius: '12px', padding: '24px', width: '720px', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,.15)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#0a2540', margin: 0 }}>🗂️ Históricos de despacho</h2>
+                <button onClick={() => setVerHist(false)} style={{ background: 'transparent', border: 'none', fontSize: '20px', color: '#9ca3af', cursor: 'pointer' }}>×</button>
+              </div>
+              <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0 0 12px' }}>Servicios finalizados, cancelados o cerrados. Doble clic para ver toda la info.</p>
+              <div style={{ ...box, overflow: 'hidden' }}>
+                {hist.length === 0 && <div style={{ padding: '16px', fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>Sin registros históricos</div>}
+                {hist.map((s: any) => {
+                  const esEmg = s.tipo_solicitud_id === 1;
+                  const mot = s.solicitud_emergencia?.motivo_consulta;
+                  const asignado = s.despacho?.[0]?.rol_guardia_movil?.movil?.cod_movil;
+                  const est = s.estado_solicitud?.nombre;
+                  return (
+                    <div key={s.id} onDoubleClick={() => verDetalle(s.id)} title="Doble clic: ver toda la info" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 11px', borderBottom: '0.5px solid #f3f4f6', cursor: 'pointer' }}>
+                      <span style={{ fontSize: '11px', color: '#6b7280', minWidth: '86px' }}>{new Date(s.created_at).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                      <span style={badge(esEmg ? '#FDECEC' : '#E6F1FB', esEmg ? '#8B1A1A' : '#0C447C')}>{esEmg ? 'Emergencia' : (s.tipo_solicitud_id === 3 ? 'Cama·SEME' : 'Traslado')}</span>
+                      <span style={{ fontSize: '12px', color: '#374151', flex: 1 }}>#{s.id} · {esEmg ? (mot?.nombre ?? '—') : rutaTraslado(s)}</span>
+                      <span style={{ fontSize: '11px', color: asignado ? '#1d4ed8' : '#9ca3af', minWidth: '52px' }}>{asignado ? `🚑 ${asignado}` : 'sin móvil'}</span>
+                      <span style={badge('#f1f5f9', '#475569')}>{estLabel(est)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', borderTop: '0.5px solid #f0f0f0', paddingTop: '12px' }}>
+                <button onClick={() => setVerHist(false)} style={{ padding: '8px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {detalle && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '24px' }}>
