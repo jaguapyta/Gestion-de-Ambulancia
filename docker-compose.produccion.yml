@@ -26,11 +26,8 @@ services:
   db:
     image: mariadb:10.4
     restart: unless-stopped
-    environment:
-      MARIADB_DATABASE: ${MARIADB_DATABASE}
-      MARIADB_USER: ${MARIADB_USER}
-      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    # Las variables (MARIADB_*) las inyecta el panel (Environment variables del
+    # proyecto). No se declaran acá para no pisarlas con la interpolacion.
     volumes:
       - ambulancia_db:/var/lib/mysql
     healthcheck:
@@ -51,12 +48,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      PORT: "3001"
-      DATABASE_URL: ${DATABASE_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
-      CORS_ORIGIN: ${CORS_ORIGIN}
+    # Las variables (DATABASE_URL, JWT_SECRET, JWT_EXPIRES_IN, CORS_ORIGIN, PORT)
+    # las inyecta el panel (Environment variables del proyecto).
     # Aplica el esquema con la DB ya lista y arranca el server.
     command: sh -c "npx prisma db push --skip-generate && node server.js"
     labels:
