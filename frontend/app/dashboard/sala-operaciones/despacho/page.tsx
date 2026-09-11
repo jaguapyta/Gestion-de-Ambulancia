@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import ProtectedRoute from '../../../components/ProtectedRoute';
@@ -53,11 +54,11 @@ export default function DespachoPage() {
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
 
   const cargar = () => {
-    fetch('http://localhost:3001/api/despacho/tablero', { headers: headers() })
+    fetch(`${API_URL}/api/despacho/tablero`, { headers: headers() })
       .then(r => r.json()).then(d => { if (d && d.moviles) setTab(d); }).catch(() => { });
   };
   useEffect(() => {
-    fetch('http://localhost:3001/api/despacho/catalogos', { headers: headers() }).then(r => r.json()).then(setCat).catch(() => { });
+    fetch(`${API_URL}/api/despacho/catalogos`, { headers: headers() }).then(r => r.json()).then(setCat).catch(() => { });
     cargar();
     const t = setInterval(cargar, 15000);
     return () => clearInterval(t);
@@ -117,12 +118,12 @@ export default function DespachoPage() {
   };
 
   const guardarUbicacion = async (id: number, lat: number, lng: number) => {
-    await fetch(`http://localhost:3001/api/despacho/solicitud/${id}/ubicacion`, { method: 'PUT', headers: headers(), body: JSON.stringify({ latitud: lat, longitud: lng }) });
+    await fetch(`${API_URL}/api/despacho/solicitud/${id}/ubicacion`, { method: 'PUT', headers: headers(), body: JSON.stringify({ latitud: lat, longitud: lng }) });
     setMsg(`Ubicación marcada para #${id}`); cargar();
   };
 
   const verDetalle = async (id: number) => {
-    const r = await fetch(`http://localhost:3001/api/solicitudes/${id}`, { headers: headers() });
+    const r = await fetch(`${API_URL}/api/solicitudes/${id}`, { headers: headers() });
     if (r.ok) setDetalle(await r.json());
   };
 
@@ -135,23 +136,23 @@ export default function DespachoPage() {
   const asignar = async (rgmId: number) => {
     if (!sel) return;
     if (sel.despachoId) {
-      const res = await fetch(`http://localhost:3001/api/despacho/${sel.despachoId}/reasignar`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ rol_guardia_movil_id: rgmId }) });
+      const res = await fetch(`${API_URL}/api/despacho/${sel.despachoId}/reasignar`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ rol_guardia_movil_id: rgmId }) });
       if (res.ok) { setMsg(`Pedido #${sel.id} reasignado`); setSel(null); cargar(); }
       else { const e = await res.json().catch(() => ({})); setMsg(e.error || 'No se pudo reasignar'); }
       return;
     }
-    const res = await fetch('http://localhost:3001/api/despacho/asignar', { method: 'POST', headers: headers(), body: JSON.stringify({ solicitud_id: sel.id, rol_guardia_movil_id: rgmId, prioridad: sel.prioridad || 'VERDE' }) });
+    const res = await fetch(`${API_URL}/api/despacho/asignar`, { method: 'POST', headers: headers(), body: JSON.stringify({ solicitud_id: sel.id, rol_guardia_movil_id: rgmId, prioridad: sel.prioridad || 'VERDE' }) });
     if (res.ok) { setMsg(`Móvil asignado al pedido #${sel.id}`); setSel(null); cargar(); }
     else setMsg('No se pudo asignar');
   };
 
   const avanzar = async (despachoId: number, estado: number, condicion?: string) => {
-    const res = await fetch(`http://localhost:3001/api/despacho/${despachoId}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: estado, condicion_cierre_id: condicion || undefined }) });
+    const res = await fetch(`${API_URL}/api/despacho/${despachoId}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: estado, condicion_cierre_id: condicion || undefined }) });
     if (res.ok) { setCerrando(null); setCond(''); cargar(); }
   };
 
   const abrirHistorial = async () => {
-    const r = await fetch('http://localhost:3001/api/despacho/historial', { headers: headers() });
+    const r = await fetch(`${API_URL}/api/despacho/historial`, { headers: headers() });
     if (r.ok) { setHist(await r.json()); setVerHist(true); }
   };
 

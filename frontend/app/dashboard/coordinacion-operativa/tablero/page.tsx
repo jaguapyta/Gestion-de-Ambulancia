@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 
 interface Tripulante {
@@ -52,7 +53,7 @@ export default function TableroPage() {
   const token = () => localStorage.getItem('token') ?? '';
 
   const cargarGuardiaActiva = () => {
-    fetch('http://localhost:3001/api/guardias/activa', {
+    fetch(`${API_URL}/api/guardias/activa`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())

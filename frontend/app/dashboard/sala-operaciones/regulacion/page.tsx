@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 
@@ -33,7 +34,7 @@ export default function RegulacionPage() {
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/regulacion/camas/catalogos', { headers: headers() }).then(r => r.json()).then(setCat).catch(() => { });
+    fetch(`${API_URL}/api/regulacion/camas/catalogos`, { headers: headers() }).then(r => r.json()).then(setCat).catch(() => { });
   }, []);
 
   const cargar = () => {
@@ -42,7 +43,7 @@ export default function RegulacionPage() {
     if (verCerrados) p.set('cerrados', '1');
     if (tiposSel.length) p.set('tipos', tiposSel.join(','));
     if (q) p.set('q', q);
-    fetch(`http://localhost:3001/api/regulacion/camas?${p.toString()}`, { headers: headers() })
+    fetch(`${API_URL}/api/regulacion/camas?${p.toString()}`, { headers: headers() })
       .then(r => r.json()).then(d => { if (Array.isArray(d)) setCasos(d); }).catch(() => { }).finally(() => setCargando(false));
   };
   useEffect(() => { const t = setTimeout(cargar, 250); return () => clearTimeout(t); }, [tiposSel, q, verCerrados]);
@@ -52,7 +53,7 @@ export default function RegulacionPage() {
   const abrir = async (id: number) => {
     setMsg(''); setMostrarResolver(false);
     setLl({ hospital_unidad: '', medico_contactado: '', telefono: '', respuesta: '' });
-    const res = await fetch(`http://localhost:3001/api/regulacion/camas/${id}`, { headers: headers() });
+    const res = await fetch(`${API_URL}/api/regulacion/camas/${id}`, { headers: headers() });
     if (!res.ok) return;
     const d = await res.json();
     setCaso(d);
@@ -65,7 +66,7 @@ export default function RegulacionPage() {
     if (!caso || !ll.hospital_unidad.trim()) { setMsg('Indicá el hospital / unidad al que llamaste.'); return; }
     setGuardando(true); setMsg('');
     try {
-      const res = await fetch(`http://localhost:3001/api/regulacion/camas/${caso.id}/llamada`, { method: 'POST', headers: headers(), body: JSON.stringify(ll) });
+      const res = await fetch(`${API_URL}/api/regulacion/camas/${caso.id}/llamada`, { method: 'POST', headers: headers(), body: JSON.stringify(ll) });
       if (res.ok) { setLl({ hospital_unidad: '', medico_contactado: '', telefono: '', respuesta: '' }); setMsg('Llamada registrada'); await abrir(caso.id); }
     } catch { } finally { setGuardando(false); }
   };
@@ -73,7 +74,7 @@ export default function RegulacionPage() {
   const guardarGestion = async (extra?: Partial<typeof g>) => {
     if (!caso) return true;
     const body = { ...g, ...extra };
-    const res = await fetch(`http://localhost:3001/api/regulacion/camas/${caso.id}/gestion`, { method: 'PUT', headers: headers(), body: JSON.stringify(body) });
+    const res = await fetch(`${API_URL}/api/regulacion/camas/${caso.id}/gestion`, { method: 'PUT', headers: headers(), body: JSON.stringify(body) });
     return res.ok;
   };
 
@@ -88,7 +89,7 @@ export default function RegulacionPage() {
     setGuardando(true); setMsg('');
     try {
       if (!(await guardarGestion())) return;
-      const res = await fetch(`http://localhost:3001/api/regulacion/camas/${caso.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado: 'RESUELTO' }) });
+      const res = await fetch(`${API_URL}/api/regulacion/camas/${caso.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado: 'RESUELTO' }) });
       if (res.ok) { setMostrarResolver(false); await abrir(caso.id); cargar(); }
     } catch { } finally { setGuardando(false); }
   };
@@ -98,7 +99,7 @@ export default function RegulacionPage() {
     setGuardando(true); setMsg('');
     try {
       await guardarGestion();
-      const res = await fetch(`http://localhost:3001/api/regulacion/camas/${caso.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado: 'CERRADA', ...cierre }) });
+      const res = await fetch(`${API_URL}/api/regulacion/camas/${caso.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado: 'CERRADA', ...cierre }) });
       if (res.ok) { setCaso(null); cargar(); }
     } catch { } finally { setGuardando(false); }
   };

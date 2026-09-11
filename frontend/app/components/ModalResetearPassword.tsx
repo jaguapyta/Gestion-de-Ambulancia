@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useState } from 'react';
 
 interface Props {
@@ -21,7 +22,7 @@ export default function ModalResetearPassword({ usuarioId, nombre, documento, on
     setProcesando(true);
     setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/usuarios/${usuarioId}/resetear-password`, {
+      const res = await fetch(`${API_URL}/api/usuarios/${usuarioId}/resetear-password`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` }
       });

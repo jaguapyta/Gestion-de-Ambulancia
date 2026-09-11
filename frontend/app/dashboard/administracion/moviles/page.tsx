@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 
@@ -58,7 +59,7 @@ export default function MovilesPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     setCargando(true);
-    fetch('http://localhost:3001/api/ambulancias', {
+    fetch(`${API_URL}/api/ambulancias`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())
@@ -120,7 +121,7 @@ export default function MovilesPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     try {
-      await fetch(`http://localhost:3001/api/ambulancias/${id}/activo`, {
+      await fetch(`${API_URL}/api/ambulancias/${id}/activo`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ activo: !activo })
@@ -137,8 +138,8 @@ export default function MovilesPage() {
     setError('');
     try {
       const url = movilEditando
-        ? `http://localhost:3001/api/ambulancias/${movilEditando.id}`
-        : 'http://localhost:3001/api/ambulancias';
+        ? `${API_URL}/api/ambulancias/${movilEditando.id}`
+        : `${API_URL}/api/ambulancias`;
       const method = movilEditando ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
@@ -184,7 +185,7 @@ export default function MovilesPage() {
     const token = localStorage.getItem('token');
     setImportando(true);
     try {
-      const res = await fetch('http://localhost:3001/api/ambulancias/masivo', {
+      const res = await fetch(`${API_URL}/api/ambulancias/masivo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ moviles: archivoData })

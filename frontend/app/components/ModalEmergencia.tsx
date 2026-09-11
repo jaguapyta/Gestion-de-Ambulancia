@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 
@@ -38,7 +39,7 @@ export default function ModalEmergencia({ telefono, nombre, onCerrar, onGuardado
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
 
-  const cargarCatalogo = () => fetch('http://localhost:3001/api/emergencias/catalogos', { headers: headers() })
+  const cargarCatalogo = () => fetch(`${API_URL}/api/emergencias/catalogos`, { headers: headers() })
     .then(r => r.json()).then(d => { if (d.motivos) setMotivos(d.motivos); }).catch(() => { });
   useEffect(() => { cargarCatalogo(); }, []);
 
@@ -79,7 +80,7 @@ export default function ModalEmergencia({ telefono, nombre, onCerrar, onGuardado
 
   const agregarSinonimo = async () => {
     if (!sel || !synText.trim()) return;
-    const res = await fetch('http://localhost:3001/api/emergencias/sinonimos', { method: 'POST', headers: headers(), body: JSON.stringify({ motivo_id: sel.id, texto: synText.trim(), origen: 'MANUAL' }) });
+    const res = await fetch(`${API_URL}/api/emergencias/sinonimos`, { method: 'POST', headers: headers(), body: JSON.stringify({ motivo_id: sel.id, texto: synText.trim(), origen: 'MANUAL' }) });
     if (res.ok) {
       setSel({ ...sel, sinonimos: [...(sel.sinonimos ?? []), { texto: synText.trim() }] });
       setMotivos(ms => ms.map(m => m.id === sel.id ? { ...m, sinonimos: [...(m.sinonimos ?? []), { texto: synText.trim() }] } : m));
@@ -103,7 +104,7 @@ export default function ModalEmergencia({ telefono, nombre, onCerrar, onGuardado
         motivo_consulta_id: sel.id, relato: relato || null, cantidad_heridos: heridos || null,
         respuestas, prioridad, origen: prioridad === sugerido ? 'ALGORITMO' : 'MANUAL',
       };
-      const res = await fetch('http://localhost:3001/api/emergencias', { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      const res = await fetch(`${API_URL}/api/emergencias`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
       const d = await res.json();
       if (res.ok) { setExito(d); onGuardado(); }
       else setMsg(d.error || 'No se pudo guardar');

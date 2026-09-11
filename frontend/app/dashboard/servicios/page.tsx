@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '../../components/ProtectedRoute';
 import FichaPrehospitalaria from '../../components/FichaPrehospitalaria';
@@ -29,7 +30,7 @@ export default function ServiciosPage() {
 
   const cargar = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/servicios/mios', { headers: headers() })
+    fetch(`${API_URL}/api/servicios/mios`, { headers: headers() })
       .then(r => r.json()).then(d => { if (Array.isArray(d)) setItems(d); }).catch(() => { }).finally(() => setCargando(false));
   };
   useEffect(() => {
@@ -42,23 +43,23 @@ export default function ServiciosPage() {
 
   const cargarFichas = async (solId: number) => {
     if (!esParamedico) return;
-    const r = await fetch(`http://localhost:3001/api/fichas/servicio/${solId}`, { headers: headers() });
+    const r = await fetch(`${API_URL}/api/fichas/servicio/${solId}`, { headers: headers() });
     if (r.ok) { const d = await r.json(); setFichas(Array.isArray(d.fichas) ? d.fichas : []); }
   };
 
   const abrir = async (id: number) => {
-    const r = await fetch(`http://localhost:3001/api/servicios/${id}`, { headers: headers() });
+    const r = await fetch(`${API_URL}/api/servicios/${id}`, { headers: headers() });
     if (r.ok) { const s = await r.json(); setSel(s); cargarFichas(s.solicitud?.id); } else setMsg('No se pudo abrir el servicio');
   };
   const avanzar = async (nuevo: number) => {
     if (!sel) return;
-    const r = await fetch(`http://localhost:3001/api/servicios/${sel.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: nuevo }) });
+    const r = await fetch(`${API_URL}/api/servicios/${sel.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: nuevo }) });
     const d = await r.json();
     if (r.ok) { await abrir(sel.id); cargar(); } else setMsg(d.error || 'No se pudo cambiar el estado');
   };
   const nuevaFicha = async () => {
     if (!sel) return;
-    const r = await fetch(`http://localhost:3001/api/fichas/servicio/${sel.solicitud?.id}`, { method: 'POST', headers: headers() });
+    const r = await fetch(`${API_URL}/api/fichas/servicio/${sel.solicitud?.id}`, { method: 'POST', headers: headers() });
     const d = await r.json();
     if (r.ok) { setFichaId(d.id); } else setMsg(d.error || 'No se pudo crear la ficha');
   };

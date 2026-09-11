@@ -1,0 +1,23 @@
+# Backend SEME — Node/Express + Prisma (producción)
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Prisma en Alpine necesita openssl
+RUN apk add --no-cache openssl
+
+# Dependencias (sin devDependencies). prisma (CLI) está en dependencies.
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Schema + cliente Prisma
+COPY prisma ./prisma
+RUN npx prisma generate
+
+# Resto del código
+COPY . .
+
+EXPOSE 3001
+
+# El schema se aplica en runtime (cuando la DB ya está lista) desde el compose.
+CMD ["node", "server.js"]

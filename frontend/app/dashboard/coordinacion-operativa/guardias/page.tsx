@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -49,7 +50,7 @@ export default function GuardiasPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     setCargando(true);
-    fetch('http://localhost:3001/api/guardias', {
+    fetch(`${API_URL}/api/guardias`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())
@@ -90,7 +91,7 @@ export default function GuardiasPage() {
     setGuardando(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/guardias', {
+      const res = await fetch(`${API_URL}/api/guardias`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(form)
@@ -108,7 +109,7 @@ export default function GuardiasPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     try {
-      await fetch(`http://localhost:3001/api/guardias/${id}/estado`, {
+      await fetch(`${API_URL}/api/guardias/${id}/estado`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ estado })

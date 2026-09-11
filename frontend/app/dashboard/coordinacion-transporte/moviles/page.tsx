@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 
@@ -63,7 +64,7 @@ export default function MovilesTransportePage() {
 
   const cargarMoviles = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/ambulancias', {
+    fetch(`${API_URL}/api/ambulancias`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -79,7 +80,7 @@ export default function MovilesTransportePage() {
 
   useEffect(() => {
     setCargando(true);
-    fetch('http://localhost:3001/api/ambulancias', {
+    fetch(`${API_URL}/api/ambulancias`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -146,7 +147,7 @@ export default function MovilesTransportePage() {
     setGuardando(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/ambulancias', {
+      const res = await fetch(`${API_URL}/api/ambulancias`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(formNuevo)
@@ -165,7 +166,7 @@ export default function MovilesTransportePage() {
     setGuardando(true);
     setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/ambulancias/${movilEditando.id}`, {
+      const res = await fetch(`${API_URL}/api/ambulancias/${movilEditando.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({
@@ -192,7 +193,7 @@ export default function MovilesTransportePage() {
     setGuardando(true);
     try {
       for (const m of confirmandoBaja.moviles) {
-        await fetch(`http://localhost:3001/api/ambulancias/${m.id}/activo`, {
+        await fetch(`${API_URL}/api/ambulancias/${m.id}/activo`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
           body: JSON.stringify({ activo: confirmandoBaja.accion === 'alta' })
@@ -223,7 +224,7 @@ export default function MovilesTransportePage() {
     if (archivoData.length === 0) return;
     setImportando(true);
     try {
-      const res = await fetch('http://localhost:3001/api/ambulancias/masivo', {
+      const res = await fetch(`${API_URL}/api/ambulancias/masivo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ moviles: archivoData })

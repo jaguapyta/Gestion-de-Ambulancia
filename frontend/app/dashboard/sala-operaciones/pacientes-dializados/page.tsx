@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 
@@ -30,7 +31,7 @@ export default function PacientesDializadosPage() {
 
   const cargar = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/pacientes-dializados', { headers: headers() })
+    fetch(`${API_URL}/api/pacientes-dializados`, { headers: headers() })
       .then(r => r.json()).then(d => { if (Array.isArray(d)) setPacientes(d); })
       .catch(() => { }).finally(() => setCargando(false));
   };
@@ -45,7 +46,7 @@ export default function PacientesDializadosPage() {
     if (!documento) return;
     setBuscando(true); setPersonaEnc(null); setPersonaNueva(false); setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/usuarios/persona/${documento}`, { headers: headers() });
+      const res = await fetch(`${API_URL}/api/usuarios/persona/${documento}`, { headers: headers() });
       if (res.ok) { const d = await res.json(); setPersonaEnc(d); setForm(prev => ({ ...prev, persona_id: String(d.id), nro_documento: d.nro_documento })); }
       else { setPersonaNueva(true); setForm(prev => ({ ...prev, nro_documento: documento })); }
     } catch { setError('Error de conexión'); } finally { setBuscando(false); }
@@ -64,7 +65,7 @@ export default function PacientesDializadosPage() {
     setGuardando(true); setError('');
     try {
       const body = { ...form, dias_semana: dias.sort((a, b) => a - b).join(','), hora_turno: form.hora_turno || null };
-      const url = editar ? `http://localhost:3001/api/pacientes-dializados/${editar.id}` : 'http://localhost:3001/api/pacientes-dializados';
+      const url = editar ? `${API_URL}/api/pacientes-dializados/${editar.id}` : `${API_URL}/api/pacientes-dializados`;
       const res = await fetch(url, { method: editar ? 'PUT' : 'POST', headers: headers(), body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al guardar'); return; }
@@ -73,7 +74,7 @@ export default function PacientesDializadosPage() {
   };
 
   const toggleActivo = async (p: Paciente) => {
-    await fetch(`http://localhost:3001/api/pacientes-dializados/${p.id}/activo`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ activo: !p.activo }) });
+    await fetch(`${API_URL}/api/pacientes-dializados/${p.id}/activo`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ activo: !p.activo }) });
     cargar();
   };
 

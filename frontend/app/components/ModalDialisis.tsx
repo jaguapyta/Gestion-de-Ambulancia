@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useState } from 'react';
 
 interface Props { telefono?: string; nombre?: string; onCerrar: () => void; onGuardado: () => void; }
@@ -26,7 +27,7 @@ export default function ModalDialisis({ telefono, nombre, onCerrar, onGuardado }
     if (!cedula.trim()) { setError('Ingresá la cédula.'); return; }
     setBuscando(true); setError(''); setPac(null); setNoEncontrado(false); setTipo('');
     try {
-      const res = await fetch(`http://localhost:3001/api/dialisis/paciente/${encodeURIComponent(cedula.trim())}`, { headers: { Authorization: `Bearer ${token()}` } });
+      const res = await fetch(`${API_URL}/api/dialisis/paciente/${encodeURIComponent(cedula.trim())}`, { headers: { Authorization: `Bearer ${token()}` } });
       const data = await res.json();
       if (data.existe) setPac(data.paciente); else setNoEncontrado(true);
     } catch { setError('Error de conexión'); } finally { setBuscando(false); }
@@ -46,7 +47,7 @@ export default function ModalDialisis({ telefono, nombre, onCerrar, onGuardado }
     if (!f.origen.trim() || !f.destino.trim()) { setError('Indicá el origen y el destino.'); return; }
     setGuardando(true); setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/dialisis', {
+      const res = await fetch(`${API_URL}/api/dialisis`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ paciente_dialisis_id: pac.id, tipo, denunciante_telefono: telefono, denunciante_nombre: nombre, ...f }),
       });

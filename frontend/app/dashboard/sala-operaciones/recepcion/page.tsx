@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { soloTelefono, telefonoValido } from '../../../../lib/validaciones';
 import { useEffect, useState } from 'react';
 import ModalPedidoCama from '../../../components/ModalPedidoCama';
@@ -81,7 +82,7 @@ export default function RecepcionPage() {
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
 
   const cargarCatalogos = () => {
-    fetch('http://localhost:3001/api/solicitudes/catalogos', { headers: headers() })
+    fetch(`${API_URL}/api/solicitudes/catalogos`, { headers: headers() })
       .then(r => r.json()).then(setCatalogos).catch(() => { });
   };
 
@@ -91,7 +92,7 @@ export default function RecepcionPage() {
     if (filtroEstado) p.set('estado_id', filtroEstado);
     if (filtroTipo) p.set('tipo_id', filtroTipo);
     if (busqueda) p.set('q', busqueda);
-    fetch(`http://localhost:3001/api/solicitudes?${p.toString()}`, { headers: headers() })
+    fetch(`${API_URL}/api/solicitudes?${p.toString()}`, { headers: headers() })
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setSolicitudes(d); })
       .catch(() => { })
@@ -111,7 +112,7 @@ export default function RecepcionPage() {
   };
 
   const verDetalle = async (id: number) => {
-    const res = await fetch(`http://localhost:3001/api/solicitudes/${id}`, { headers: headers() });
+    const res = await fetch(`${API_URL}/api/solicitudes/${id}`, { headers: headers() });
     if (!res.ok) return;
     const d = await res.json();
     setDetalle(d);

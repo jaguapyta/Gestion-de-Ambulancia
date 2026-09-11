@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 
 interface Rol {
@@ -17,7 +18,7 @@ export default function RolesPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     setCargando(true);
-    fetch('http://localhost:3001/api/roles', {
+    fetch(`${API_URL}/api/roles`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())

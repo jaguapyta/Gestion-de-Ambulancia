@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 
@@ -39,7 +40,7 @@ export default function BasesPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     setCargando(true);
-    fetch('http://localhost:3001/api/bases', {
+    fetch(`${API_URL}/api/bases`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())
@@ -75,7 +76,7 @@ export default function BasesPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     try {
-      await fetch(`http://localhost:3001/api/bases/${id}/activa`, {
+      await fetch(`${API_URL}/api/bases/${id}/activa`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ activa: !activa })
@@ -92,8 +93,8 @@ export default function BasesPage() {
     setError('');
     try {
       const url = baseEditando
-        ? `http://localhost:3001/api/bases/${baseEditando.id}`
-        : 'http://localhost:3001/api/bases';
+        ? `${API_URL}/api/bases/${baseEditando.id}`
+        : `${API_URL}/api/bases`;
       const method = baseEditando ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
@@ -127,7 +128,7 @@ export default function BasesPage() {
     const token = localStorage.getItem('token');
     setImportando(true);
     try {
-      const res = await fetch('http://localhost:3001/api/bases/masivo', {
+      const res = await fetch(`${API_URL}/api/bases/masivo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bases: archivoData })

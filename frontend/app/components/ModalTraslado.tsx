@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import { soloTelefono, telefonoValido } from '../../lib/validaciones';
 
@@ -40,7 +41,7 @@ export default function ModalTraslado({ telefono, nombre, onCerrar, onGuardado }
   const set = (k: keyof typeof F, v: any) => setF(prev => ({ ...prev, [k]: v }));
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/traslados/catalogos', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch(`${API_URL}/api/traslados/catalogos`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json()).then(setCat).catch(() => { });
   }, []);
 
@@ -72,7 +73,7 @@ export default function ModalTraslado({ telefono, nombre, onCerrar, onGuardado }
         intubado: f.intubado, acompana_medico: f.acompana_medico,
         inotropicos: inoActivo ? Object.entries(inoSel).map(([id, d]) => ({ tipo_inotripico_id: Number(id), dosis: d.dosis, goteo: d.goteo })) : [],
       };
-      const res = await fetch('http://localhost:3001/api/traslados', {
+      const res = await fetch(`${API_URL}/api/traslados`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` }, body: JSON.stringify(body),
       });
       const data = await res.json();

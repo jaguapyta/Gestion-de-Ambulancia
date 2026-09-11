@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useState } from 'react';
 
 interface Turno { dia_semana: number; turno: 'DIURNO' | 'NOCTURNO'; }
@@ -47,7 +48,7 @@ export default function ModalVinculosArm({ recurso = 'arm', habilitadoId, nombre
     }
     setGuardando(true); setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/arm/${habilitadoId}/vinculos`, {
+      const res = await fetch(`${API_URL}/api/arm/${habilitadoId}/vinculos`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ vinculos: vinculos.map(v => [v.a, v.b]) })

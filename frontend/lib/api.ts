@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+// NEXT_PUBLIC_API_URL es el ORIGIN del backend (sin /api). Acá se agrega /api,
+// igual que los fetch que usan `${API_URL}/api/...`.
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001') + '/api',
 });
 
 // Interceptor para agregar token automáticamente

@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useState } from 'react';
 
 interface TurnoSel { dia_semana: number; turno: 'DIURNO' | 'NOCTURNO'; }
@@ -34,7 +35,7 @@ export default function ModalTurnosMedico({ habilitadoId, nombre, turnosActuales
   const guardar = async () => {
     setGuardando(true); setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/medicos/${habilitadoId}/turnos`, {
+      const res = await fetch(`${API_URL}/api/medicos/${habilitadoId}/turnos`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ turnos })

@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useState } from 'react';
 
 interface Props {
@@ -57,7 +58,7 @@ export default function ModalDiasGuardia({
     setGuardando(true);
     setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/${recurso}/${habilitadoId}/dias-guardia`, {
+      const res = await fetch(`${API_URL}/api/${recurso}/${habilitadoId}/dias-guardia`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ dias_guardia: dias })

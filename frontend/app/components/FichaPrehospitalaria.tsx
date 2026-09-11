@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import FirmaTouch from './FirmaTouch';
 
@@ -64,7 +65,7 @@ export default function FichaPrehospitalaria({ fichaId, onCerrar, onGuardado }: 
   };
 
   useEffect(() => {
-    fetch(`http://localhost:3001/api/fichas/${fichaId}`, { headers: headers() })
+    fetch(`${API_URL}/api/fichas/${fichaId}`, { headers: headers() })
       .then(r => r.json())
       .then(d => {
         const base: Datos = { p5_gcs_tipo: 'adulto', ...(d.precarga || {}) };
@@ -89,7 +90,7 @@ export default function FichaPrehospitalaria({ fichaId, onCerrar, onGuardado }: 
     setGuardando(true); setMsg('');
     const datos = { ...f, _firmas: { paciente: firmaPaciente, testigo: firmaTestigo, paramedico: firmaParamedico, medico: firmaMedico } };
     try {
-      const res = await fetch(`http://localhost:3001/api/fichas/${fichaId}`, {
+      const res = await fetch(`${API_URL}/api/fichas/${fichaId}`, {
         method: 'PUT', headers: headers(),
         body: JSON.stringify({ datos, firma_entrega: firmaMedico, firma_prestador: firmaParamedico, cerrar }),
       });
@@ -104,7 +105,7 @@ export default function FichaPrehospitalaria({ fichaId, onCerrar, onGuardado }: 
   const verAntecedentes = async () => {
     const ci = (f.dg_ci || '').trim();
     if (!ci) { setMsg('Cargá la C.I. del paciente para buscar antecedentes.'); return; }
-    const r = await fetch(`http://localhost:3001/api/fichas/antecedentes/${encodeURIComponent(ci)}?excluir=${fichaId}`, { headers: headers() });
+    const r = await fetch(`${API_URL}/api/fichas/antecedentes/${encodeURIComponent(ci)}?excluir=${fichaId}`, { headers: headers() });
     if (r.ok) setAntecedentes(await r.json());
   };
 

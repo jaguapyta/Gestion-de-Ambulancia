@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -24,7 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const token = localStorage.getItem('token');
       if (!token) { router.replace('/login'); return; }
 
-      fetch('http://localhost:3001/api/auth/verificar', {
+      fetch(`${API_URL}/api/auth/verificar`, {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then(r => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useMemo, useState } from 'react';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 
@@ -22,18 +23,18 @@ export default function ProtocoloPage() {
 
   const cargar = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/emergencias/motivos-editor', { headers: headers() })
+    fetch(`${API_URL}/api/emergencias/motivos-editor`, { headers: headers() })
       .then(r => r.json()).then(d => { if (d.motivos) setMotivos(d.motivos); }).catch(() => { }).finally(() => setCargando(false));
   };
   useEffect(() => { cargar(); }, []);
 
   const patchPregunta = async (motivoId: number, preg: any, campos: any) => {
     setMotivos(ms => ms.map(m => m.id !== motivoId ? m : { ...m, preguntas: m.preguntas.map((p: any) => p.id === preg.id ? { ...p, ...campos } : p) }));
-    await fetch(`http://localhost:3001/api/emergencias/pregunta/${preg.id}`, { method: 'PATCH', headers: headers(), body: JSON.stringify(campos) });
+    await fetch(`${API_URL}/api/emergencias/pregunta/${preg.id}`, { method: 'PATCH', headers: headers(), body: JSON.stringify(campos) });
   };
   const patchMotivo = async (motivoId: number, color: string) => {
     setMotivos(ms => ms.map(m => m.id === motivoId ? { ...m, color } : m));
-    await fetch(`http://localhost:3001/api/emergencias/motivo/${motivoId}`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ color }) });
+    await fetch(`${API_URL}/api/emergencias/motivo/${motivoId}`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ color }) });
   };
 
   const filtrados = useMemo(() => {

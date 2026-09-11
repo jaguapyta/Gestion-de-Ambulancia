@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useState } from 'react';
 
 interface Contacto {
@@ -55,7 +56,7 @@ export default function ModalEditarFuncionario(props: Props) {
   const [nuevoValor, setNuevoValor] = useState('');
 
   const token = () => localStorage.getItem('token') ?? '';
-  const base = `http://localhost:3001/api/${recurso}/${habilitadoId}`;
+  const base = `${API_URL}/api/${recurso}/${habilitadoId}`;
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
 
   const flash = (msg: string) => { setExito(msg); setError(''); setTimeout(() => setExito(''), 2500); };

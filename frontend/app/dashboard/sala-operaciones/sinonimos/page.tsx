@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useMemo, useState } from 'react';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 
@@ -19,7 +20,7 @@ export default function SinonimosPage() {
 
   const cargar = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/emergencias/sinonimos', { headers: headers() })
+    fetch(`${API_URL}/api/emergencias/sinonimos`, { headers: headers() })
       .then(r => r.json()).then(d => { if (d.motivos) setMotivos(d.motivos); }).catch(() => { }).finally(() => setCargando(false));
   };
   useEffect(() => { cargar(); }, []);
@@ -27,11 +28,11 @@ export default function SinonimosPage() {
   const agregar = async (motivoId: number) => {
     const texto = (nuevo[motivoId] ?? '').trim();
     if (!texto) return;
-    const res = await fetch('http://localhost:3001/api/emergencias/sinonimos', { method: 'POST', headers: headers(), body: JSON.stringify({ motivo_id: motivoId, texto, origen: 'MANUAL' }) });
+    const res = await fetch(`${API_URL}/api/emergencias/sinonimos`, { method: 'POST', headers: headers(), body: JSON.stringify({ motivo_id: motivoId, texto, origen: 'MANUAL' }) });
     if (res.ok) { setNuevo({ ...nuevo, [motivoId]: '' }); cargar(); }
   };
-  const toggle = async (id: number) => { await fetch(`http://localhost:3001/api/emergencias/sinonimos/${id}`, { method: 'PATCH', headers: headers() }); cargar(); };
-  const borrar = async (id: number) => { if (!confirm('¿Borrar este sinónimo?')) return; await fetch(`http://localhost:3001/api/emergencias/sinonimos/${id}`, { method: 'DELETE', headers: headers() }); cargar(); };
+  const toggle = async (id: number) => { await fetch(`${API_URL}/api/emergencias/sinonimos/${id}`, { method: 'PATCH', headers: headers() }); cargar(); };
+  const borrar = async (id: number) => { if (!confirm('¿Borrar este sinónimo?')) return; await fetch(`${API_URL}/api/emergencias/sinonimos/${id}`, { method: 'DELETE', headers: headers() }); cargar(); };
 
   const filtrados = useMemo(() => {
     const s = q.trim().toLowerCase();

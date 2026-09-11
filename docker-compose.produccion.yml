@@ -1,0 +1,89 @@
+# Despliegue de producción del SEME en el VPS compartido (Traefik + HTTPS).
+# Un solo subdominio con ruteo por path:
+#   ambulancia.columbiatcc.online/api        -> backend (Express :3001)
+#   ambulancia.columbiatcc.online/socket.io  -> backend (:3001)
+#   ambulancia.columbiatcc.online/*          -> frontend (Next :3000)
+#
+# Nombre de proyecto Compose: ambulancia  (usar SIEMPRE -p ambulancia)
+#
+# PENDIENTE de confirmar con el administrador del VPS (marcados con # <-- CONFIRMAR):
+#   - entrypoint HTTPS (referencia: websecure)
+#   - certresolver TLS (referencia: letsencrypt)
+#   - modo de red de Traefik (host o bridge). Este archivo asume modo HOST (CASO A).
+#     Si Traefik está en una red bridge, ver el bloque comentado al final.
+
+services:
+  db:
+    image: mariadb:10.4
+    restart: unless-stopped
+    env_file:
+      - /opt/ambulancia/config/runtime.env
+    volumes:
+      - ambulancia_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    labels:
+      - "traefik.enable=false"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.produccion
+    image: ambulancia-backend:release1
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - /opt/ambulancia/config/runtime.env
+    # Aplica el esquema con la DB ya lista y arranca el server.
+    command: sh -c "npx prisma db push --skip-generate && node server.js"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ambulancia-api.rule=Host(`ambulancia.columbiatcc.online`) && (PathPrefix(`/api`) || PathPrefix(`/socket.io`))"
+      - "traefik.http.routers.ambulancia-api.entrypoints=websecure"        # <-- CONFIRMAR
+      - "traefik.http.routers.ambulancia-api.tls=true"
+      - "traefik.http.routers.ambulancia-api.tls.certresolver=letsencrypt" # <-- CONFIRMAR
+      - "traefik.http.routers.ambulancia-api.priority=100"
+      - "traefik.http.routers.ambulancia-api.service=ambulancia-api"
+      - "traefik.http.services.ambulancia-api.loadbalancer.server.port=3001"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.produccion
+      args:
+        NEXT_PUBLIC_API_URL: https://ambulancia.columbiatcc.online
+        NEXT_PUBLIC_SOCKET_URL: https://ambulancia.columbiatcc.online
+    image: ambulancia-frontend:release1
+    restart: unless-stopped
+    depends_on:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ambulancia-web.rule=Host(`ambulancia.columbiatcc.online`)"
+      - "traefik.http.routers.ambulancia-web.entrypoints=websecure"        # <-- CONFIRMAR
+      - "traefik.http.routers.ambulancia-web.tls=true"
+      - "traefik.http.routers.ambulancia-web.tls.certresolver=letsencrypt" # <-- CONFIRMAR
+      - "traefik.http.routers.ambulancia-web.priority=1"
+      - "traefik.http.routers.ambulancia-web.service=ambulancia-web"
+      - "traefik.http.services.ambulancia-web.loadbalancer.server.port=3000"
+
+volumes:
+  ambulancia_db:
+
+# ---------------------------------------------------------------------------
+# CASO B — SOLO si Traefik corre en una red BRIDGE (no en modo host).
+# Descomentar y reemplazar <RED_REAL_DEL_PROXY> por la red externa real del proxy.
+# Agregar a los servicios backend y frontend:  networks: [default, proxy]
+# y a cada uno el label:  "traefik.docker.network=<RED_REAL_DEL_PROXY>"
+#
+# networks:
+#   default: {}
+#   proxy:
+#     external: true
+#     name: <RED_REAL_DEL_PROXY>
+# ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import ModalEstadosTemporales from '../../../components/ModalEstadosTemporales';
@@ -115,7 +116,7 @@ export default function ParamedicosPage() {
 
   const cargarParamedicos = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/paramedicos', {
+    fetch(`${API_URL}/api/paramedicos`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -141,7 +142,7 @@ export default function ParamedicosPage() {
     setPersonaNueva(false);
     setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/usuarios/persona/${documento}`, {
+      const res = await fetch(`${API_URL}/api/usuarios/persona/${documento}`, {
         headers: { Authorization: `Bearer ${token()}` }
       });
       if (res.ok) {
@@ -208,7 +209,7 @@ export default function ParamedicosPage() {
     setGuardando(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/paramedicos', {
+      const res = await fetch(`${API_URL}/api/paramedicos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ ...form, dias_guardia: diasSeleccionados, contactos })
@@ -225,7 +226,7 @@ export default function ParamedicosPage() {
     if (!paramedicoSeleccionado || !formContacto.valor) return;
     setGuardando(true);
     try {
-      await fetch(`http://localhost:3001/api/paramedicos/${paramedicoSeleccionado.id}/contacto`, {
+      await fetch(`${API_URL}/api/paramedicos/${paramedicoSeleccionado.id}/contacto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(formContacto)
@@ -239,7 +240,7 @@ export default function ParamedicosPage() {
 
   const toggleActivo = async (id: number, activo: boolean) => {
     try {
-      await fetch(`http://localhost:3001/api/paramedicos/${id}/activo`, {
+      await fetch(`${API_URL}/api/paramedicos/${id}/activo`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ activo: !activo })
@@ -279,7 +280,7 @@ export default function ParamedicosPage() {
     if (archivoData.length === 0) return;
     setImportando(true);
     try {
-      const res = await fetch('http://localhost:3001/api/paramedicos/masivo', {
+      const res = await fetch(`${API_URL}/api/paramedicos/masivo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ paramedicos: archivoData })

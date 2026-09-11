@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import ModalEstadosTemporales from '../../../components/ModalEstadosTemporales';
@@ -117,7 +118,7 @@ export default function ConductoresPage() {
 
   const cargarConductores = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/conductores', {
+    fetch(`${API_URL}/api/conductores`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -144,7 +145,7 @@ export default function ConductoresPage() {
     setEsParamedico(false);
     setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/usuarios/persona/${documento}`, {
+      const res = await fetch(`${API_URL}/api/usuarios/persona/${documento}`, {
         headers: { Authorization: `Bearer ${token()}` }
       });
       if (res.ok) {
@@ -214,7 +215,7 @@ export default function ConductoresPage() {
     setGuardando(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/conductores', {
+      const res = await fetch(`${API_URL}/api/conductores`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ ...form, dias_guardia: esParamedico ? [] : diasSeleccionados, contactos: esParamedico ? [] : contactos })
@@ -231,7 +232,7 @@ export default function ConductoresPage() {
     if (!conductorSeleccionado || !formContacto.valor) return;
     setGuardando(true);
     try {
-      await fetch(`http://localhost:3001/api/conductores/${conductorSeleccionado.id}/contacto`, {
+      await fetch(`${API_URL}/api/conductores/${conductorSeleccionado.id}/contacto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(formContacto)
@@ -245,7 +246,7 @@ export default function ConductoresPage() {
 
   const toggleActivo = async (id: number, activo: boolean) => {
     try {
-      await fetch(`http://localhost:3001/api/conductores/${id}/activo`, {
+      await fetch(`${API_URL}/api/conductores/${id}/activo`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ activo: !activo })
@@ -286,7 +287,7 @@ export default function ConductoresPage() {
     if (archivoData.length === 0) return;
     setImportando(true);
     try {
-      const res = await fetch('http://localhost:3001/api/conductores/masivo', {
+      const res = await fetch(`${API_URL}/api/conductores/masivo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ conductores: archivoData })

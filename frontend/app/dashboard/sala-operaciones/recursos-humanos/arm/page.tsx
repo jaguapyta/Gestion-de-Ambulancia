@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import ModalEstadosTemporales from '../../../../components/ModalEstadosTemporales';
@@ -79,7 +80,7 @@ export default function ArmPage() {
 
   const cargar = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/arm', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch(`${API_URL}/api/arm`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setArms(data); })
       .catch(err => console.error(err))
@@ -97,7 +98,7 @@ export default function ArmPage() {
     if (!documento) return;
     setBuscandoDoc(true); setPersonaEncontrada(null); setPersonaNueva(false); setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/usuarios/persona/${documento}`, { headers: { Authorization: `Bearer ${token()}` } });
+      const res = await fetch(`${API_URL}/api/usuarios/persona/${documento}`, { headers: { Authorization: `Bearer ${token()}` } });
       if (res.ok) {
         const data = await res.json();
         setPersonaEncontrada(data);
@@ -143,7 +144,7 @@ export default function ArmPage() {
     }
     setGuardando(true); setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/arm', {
+      const res = await fetch(`${API_URL}/api/arm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ ...form, vinculos: vinculos.map(v => [v.a, v.b]), contactos })
@@ -160,7 +161,7 @@ export default function ArmPage() {
     if (!seleccionado || !formContacto.valor) return;
     setGuardando(true);
     try {
-      await fetch(`http://localhost:3001/api/arm/${seleccionado.id}/contacto`, {
+      await fetch(`${API_URL}/api/arm/${seleccionado.id}/contacto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(formContacto)
@@ -171,7 +172,7 @@ export default function ArmPage() {
 
   const toggleActivo = async (id: number, activo: boolean) => {
     try {
-      await fetch(`http://localhost:3001/api/arm/${id}/activo`, {
+      await fetch(`${API_URL}/api/arm/${id}/activo`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ activo: !activo })
@@ -205,7 +206,7 @@ export default function ArmPage() {
     if (archivoData.length === 0) return;
     setImportando(true);
     try {
-      const res = await fetch('http://localhost:3001/api/arm/masivo', {
+      const res = await fetch(`${API_URL}/api/arm/masivo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ arms: archivoData })

@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 
 export default function ConfiguracionPage() {
@@ -20,7 +21,7 @@ export default function ConfiguracionPage() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) return;
-    fetch('http://localhost:3001/api/configuracion', {
+    fetch(`${API_URL}/api/configuracion`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())
@@ -44,7 +45,7 @@ export default function ConfiguracionPage() {
     setGuardando(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/configuracion', {
+      const res = await fetch(`${API_URL}/api/configuracion`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(form)

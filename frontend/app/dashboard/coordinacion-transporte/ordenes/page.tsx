@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 
 interface Orden {
@@ -87,7 +88,7 @@ export default function OrdenesPage() {
 
   const cargarOrdenes = () => {
     setCargando(true);
-    fetch('http://localhost:3001/api/ordenes', {
+    fetch(`${API_URL}/api/ordenes`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -98,10 +99,10 @@ export default function OrdenesPage() {
 
   useEffect(() => {
     cargarOrdenes();
-    fetch('http://localhost:3001/api/ambulancias', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch(`${API_URL}/api/ambulancias`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setMoviles(data.filter((m: any) => m.activo)); });
-    fetch('http://localhost:3001/api/conductores', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch(`${API_URL}/api/conductores`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setConductores(data.filter((c: any) => c.activo)); });
   }, []);
@@ -115,7 +116,7 @@ export default function OrdenesPage() {
   const cargarGuardiaActiva = async () => {
     setCargandoGuardia(true);
     try {
-      const res = await fetch('http://localhost:3001/api/ordenes/guardia-activa', {
+      const res = await fetch(`${API_URL}/api/ordenes/guardia-activa`, {
         headers: { Authorization: `Bearer ${token()}` }
       });
       if (!res.ok) {
@@ -156,7 +157,7 @@ export default function OrdenesPage() {
     }
     setGuardando(true); setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/ordenes', {
+      const res = await fetch(`${API_URL}/api/ordenes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(form)
@@ -174,7 +175,7 @@ export default function OrdenesPage() {
     if (!ordenSeleccionada) return;
     setGuardando(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/ordenes/${ordenSeleccionada.id}/cerrar`, {
+      const res = await fetch(`${API_URL}/api/ordenes/${ordenSeleccionada.id}/cerrar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify({ km_llegada: kmLlegada })

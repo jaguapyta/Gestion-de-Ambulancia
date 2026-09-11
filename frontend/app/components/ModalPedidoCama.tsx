@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import { soloTelefono, telefonoValido } from '../../lib/validaciones';
 
@@ -56,7 +57,7 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
   const setS = (k: keyof typeof sol, v: any) => setSol(prev => ({ ...prev, [k]: v }));
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/camas/catalogos', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch(`${API_URL}/api/camas/catalogos`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json())
       .then((d) => setCat({ tipos_paciente: [], tipos_requerimiento: [], condiciones: [], tipos_oxigeno: [], tipos_inotropico: [], centros: [], ...d }))
       .catch(() => { });
@@ -68,7 +69,7 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
     if (!cedula.trim()) { setError('Ingresá la cédula del paciente.'); return; }
     setBuscando(true); setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/camas/paciente/${encodeURIComponent(cedula.trim())}?abierto=1`, { headers: { Authorization: `Bearer ${token()}` } });
+      const res = await fetch(`${API_URL}/api/camas/paciente/${encodeURIComponent(cedula.trim())}?abierto=1`, { headers: { Authorization: `Bearer ${token()}` } });
       const data = await res.json();
       if (data.existe && data.original) {
         setOriginal(data.original); setModo('reiteracion');
@@ -124,7 +125,7 @@ export default function ModalPedidoCama({ telefono, nombre, onCerrar, onGuardado
         if (obstMode === 'obstetrica') body.obstetrica = { edad_gestacional: f.edad_gestacional, controles_prenatales: f.tieneControles ? f.controles_prenatales : '' };
         if (obstMode === 'rn') body.obstetrica = { edad_materna: f.edad_materna, via_parto: f.via_parto, apgar: f.apgar, maduracion_pulmonar: f.maduracion_pulmonar };
       }
-      const res = await fetch('http://localhost:3001/api/camas', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` }, body: JSON.stringify(body) });
+      const res = await fetch(`${API_URL}/api/camas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Error al agregar el pedido'); return; }
       const nom = modo === 'reiteracion' ? `${original?.paciente_nombre ?? ''} ${original?.paciente_apellido ?? ''}`.trim() || `CI ${cedula}` : `${f.paciente_nombre} ${f.paciente_apellido}`.trim() || `CI ${cedula}`;

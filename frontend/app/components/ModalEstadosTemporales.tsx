@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 
 interface EstadoTemporal {
@@ -62,7 +63,7 @@ export default function ModalEstadosTemporales({ usuarioId, nombre, companeros, 
 
   const cargar = () => {
     setCargando(true);
-    fetch(`http://localhost:3001/api/estados-temporales?usuario_id=${usuarioId}&incluir_cancelados=true`, {
+    fetch(`${API_URL}/api/estados-temporales?usuario_id=${usuarioId}&incluir_cancelados=true`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -96,7 +97,7 @@ export default function ModalEstadosTemporales({ usuarioId, nombre, companeros, 
       if (TIPOS_CON_DIA.includes(form.tipo)) body.dia_semana_nuevo = parseInt(form.dia_semana_nuevo);
       if (form.tipo === 'REEMPLAZO') body.usuario_relacionado_id = parseInt(form.usuario_relacionado_id);
 
-      const res = await fetch('http://localhost:3001/api/estados-temporales', {
+      const res = await fetch(`${API_URL}/api/estados-temporales`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(body)
@@ -115,7 +116,7 @@ export default function ModalEstadosTemporales({ usuarioId, nombre, companeros, 
     setError('');
     setExito('');
     try {
-      const res = await fetch(`http://localhost:3001/api/estados-temporales/${id}/cancelar`, {
+      const res = await fetch(`${API_URL}/api/estados-temporales/${id}/cancelar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` }
       });

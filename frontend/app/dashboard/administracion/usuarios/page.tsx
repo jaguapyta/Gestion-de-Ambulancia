@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 
@@ -67,7 +68,7 @@ export default function UsuariosPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     setCargando(true);
-    fetch('http://localhost:3001/api/usuarios', {
+    fetch(`${API_URL}/api/usuarios`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())
@@ -80,7 +81,7 @@ export default function UsuariosPage() {
     cargarUsuarios();
     const token = localStorage.getItem('token');
     if (!token) return;
-    fetch('http://localhost:3001/api/roles', {
+    fetch(`${API_URL}/api/roles`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.json())
@@ -128,7 +129,7 @@ export default function UsuariosPage() {
     setPersonaNueva(false);
     setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/usuarios/persona/${documento}`, {
+      const res = await fetch(`${API_URL}/api/usuarios/persona/${documento}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -161,7 +162,7 @@ export default function UsuariosPage() {
     const token = localStorage.getItem('token');
     if (!token) return;
     try {
-      await fetch(`http://localhost:3001/api/usuarios/${id}/activo`, {
+      await fetch(`${API_URL}/api/usuarios/${id}/activo`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ activo: !activo })
@@ -181,7 +182,7 @@ export default function UsuariosPage() {
     const token = localStorage.getItem('token');
     setGuardandoRol(true);
     try {
-      await fetch(`http://localhost:3001/api/usuarios/${usuarioEditando.id}/rol`, {
+      await fetch(`${API_URL}/api/usuarios/${usuarioEditando.id}/rol`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rol_id: parseInt(rolEditando) })
@@ -206,7 +207,7 @@ export default function UsuariosPage() {
     setGuardando(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:3001/api/usuarios', {
+      const res = await fetch(`${API_URL}/api/usuarios`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(form)
@@ -248,7 +249,7 @@ export default function UsuariosPage() {
     const token = localStorage.getItem('token');
     setImportando(true);
     try {
-      const res = await fetch('http://localhost:3001/api/usuarios/masivo', {
+      const res = await fetch(`${API_URL}/api/usuarios/masivo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ usuarios: archivoData })

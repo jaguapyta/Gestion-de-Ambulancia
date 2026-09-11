@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
@@ -81,7 +82,7 @@ export default function GuardiaDetallePage() {
 
   const cargarGuardia = () => {
     setCargando(true);
-    fetch(`http://localhost:3001/api/guardias/${id}`, {
+    fetch(`${API_URL}/api/guardias/${id}`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -93,7 +94,7 @@ export default function GuardiaDetallePage() {
   // El personal disponible se calcula para el HORARIO del móvil (respeta la superposición).
   const cargarPersonalDisponible = (movilId: number) => {
     setCargandoPersonal(true);
-    fetch(`http://localhost:3001/api/guardias/${id}/personal-disponible?movil_id=${movilId}`, {
+    fetch(`${API_URL}/api/guardias/${id}/personal-disponible?movil_id=${movilId}`, {
       headers: { Authorization: `Bearer ${token()}` }
     })
       .then(r => r.json())
@@ -109,11 +110,11 @@ export default function GuardiaDetallePage() {
 
   useEffect(() => {
     cargarGuardia();
-    fetch('http://localhost:3001/api/ambulancias', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch(`${API_URL}/api/ambulancias`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json()).then(data => { if (Array.isArray(data)) setMoviles(data.filter((m: any) => m.activo)); });
-    fetch('http://localhost:3001/api/bases', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch(`${API_URL}/api/bases`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json()).then(data => { if (Array.isArray(data)) setBases(data.filter((b: any) => b.activa)); });
-    fetch('http://localhost:3001/api/tipo-soporte', { headers: { Authorization: `Bearer ${token()}` } })
+    fetch(`${API_URL}/api/tipo-soporte`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json()).then(data => { if (Array.isArray(data)) setTiposSoporte(data); })
       .catch(() => setTiposSoporte([
         { id: 1, nombre: 'BÁSICO' },
@@ -156,7 +157,7 @@ export default function GuardiaDetallePage() {
     }
     setGuardando(true); setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/guardias/${id}/movil`, {
+      const res = await fetch(`${API_URL}/api/guardias/${id}/movil`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(formMovil)
@@ -173,7 +174,7 @@ export default function GuardiaDetallePage() {
     if (!formTripulante.usuario_id) { setError('Seleccioná un usuario'); return; }
     setGuardando(true); setError('');
     try {
-      const res = await fetch(`http://localhost:3001/api/guardias/movil/${movilSeleccionado}/tripulante`, {
+      const res = await fetch(`${API_URL}/api/guardias/movil/${movilSeleccionado}/tripulante`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(formTripulante)
@@ -188,7 +189,7 @@ export default function GuardiaDetallePage() {
 
   const eliminarTripulante = async (tripulanteId: number) => {
     try {
-      await fetch(`http://localhost:3001/api/guardias/tripulante/${tripulanteId}`, {
+      await fetch(`${API_URL}/api/guardias/tripulante/${tripulanteId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token()}` }
       });
@@ -199,7 +200,7 @@ export default function GuardiaDetallePage() {
 
   const eliminarMovilGuardia = async (movilId: number) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/guardias/movil/${movilId}`, {
+      const res = await fetch(`${API_URL}/api/guardias/movil/${movilId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token()}` }
       });
