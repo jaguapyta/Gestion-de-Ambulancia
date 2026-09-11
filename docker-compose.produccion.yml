@@ -30,12 +30,6 @@ services:
     # proyecto). No se declaran acá para no pisarlas con la interpolacion.
     volumes:
       - ambulancia_db:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      start_period: 40s
-      interval: 10s
-      timeout: 5s
-      retries: 12
     labels:
       - "traefik.enable=false"
 
@@ -46,12 +40,11 @@ services:
     image: ambulancia-backend:release1
     restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     # Las variables (DATABASE_URL, JWT_SECRET, JWT_EXPIRES_IN, CORS_ORIGIN, PORT)
     # las inyecta el panel (Environment variables del proyecto).
-    # Aplica el esquema con la DB ya lista y arranca el server.
-    command: sh -c "npx prisma db push --skip-generate && node server.js"
+    # Espera a que la base acepte conexiones (reintenta db push) y recien arranca.
+    command: sh -c "until npx prisma db push --skip-generate; do echo 'esperando la base...'; sleep 3; done; node server.js"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ambulancia-api.rule=Host(`ambulancia.columbiatcc.online`) && (PathPrefix(`/api`) || PathPrefix(`/socket.io`))"
