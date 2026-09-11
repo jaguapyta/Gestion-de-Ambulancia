@@ -20,7 +20,8 @@ export default function ServiciosPage() {
   const [sel, setSel] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState('');
-  const [fichaAbierta, setFichaAbierta] = useState(false);
+  const [fichas, setFichas] = useState<any[]>([]);
+  const [fichaId, setFichaId] = useState<number | null>(null);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -39,15 +40,27 @@ export default function ServiciosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const cargarFichas = async (solId: number) => {
+    if (!esParamedico) return;
+    const r = await fetch(`http://localhost:3001/api/fichas/servicio/${solId}`, { headers: headers() });
+    if (r.ok) { const d = await r.json(); setFichas(Array.isArray(d.fichas) ? d.fichas : []); }
+  };
+
   const abrir = async (id: number) => {
     const r = await fetch(`http://localhost:3001/api/servicios/${id}`, { headers: headers() });
-    if (r.ok) setSel(await r.json()); else setMsg('No se pudo abrir el servicio');
+    if (r.ok) { const s = await r.json(); setSel(s); cargarFichas(s.solicitud?.id); } else setMsg('No se pudo abrir el servicio');
   };
   const avanzar = async (nuevo: number) => {
     if (!sel) return;
     const r = await fetch(`http://localhost:3001/api/servicios/${sel.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: nuevo }) });
     const d = await r.json();
     if (r.ok) { await abrir(sel.id); cargar(); } else setMsg(d.error || 'No se pudo cambiar el estado');
+  };
+  const nuevaFicha = async () => {
+    if (!sel) return;
+    const r = await fetch(`http://localhost:3001/api/fichas/servicio/${sel.solicitud?.id}`, { method: 'POST', headers: headers() });
+    const d = await r.json();
+    if (r.ok) { setFichaId(d.id); } else setMsg(d.error || 'No se pudo crear la ficha');
   };
 
   const activos = items.filter(x => x.estado_despacho_id <= 3);
@@ -149,27 +162,34 @@ export default function ServiciosPage() {
 
                 {esParamedico && (
                   <div style={{ border: '0.5px dashed #cbd5e1', borderRadius: '10px', padding: '14px', marginBottom: '12px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#0a2540', marginBottom: '6px' }}>🩺 Ficha prehospitalaria</div>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px' }}>Los datos de recepción vienen precargados. Al cerrarla con la firma del prestador, el servicio pasa a CERRADO.</div>
-                    <button onClick={() => setFichaAbierta(true)} style={{ padding: '8px 16px', borderRadius: '7px', border: 'none', background: '#0a2540', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-                      Abrir ficha prehospitalaria
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#0a2540', marginBottom: '6px' }}>🩺 Fichas prehospitalarias {fichas.length ? `(${fichas.length})` : ''}</div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>Una ficha por paciente. En incidentes con varias víctimas, agregá una ficha por cada una.</div>
+                    {fichas.length === 0 && <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px' }}>Todavía no hay fichas para este servicio.</div>}
+                    {fichas.map((f: any) => (
+                      <div key={f.id} onClick={() => setFichaId(f.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', border: '0.5px solid #e5e7eb', borderRadius: '8px', marginBottom: '6px', cursor: 'pointer' }}>
+                        <span style={{ fontSize: '13px', color: '#0a2540' }}><b>Víctima {f.nro_victima}</b> · {f.nombre}</span>
+                        <span style={chip(f.cerrada ? '#f0fdf4' : '#fff7ed', f.cerrada ? '#15803d' : '#c2410c')}>{f.cerrada ? 'Cerrada' : 'En proceso'}</span>
+                      </div>
+                    ))}
+                    <button onClick={nuevaFicha} style={{ marginTop: '4px', padding: '8px 16px', borderRadius: '7px', border: 'none', background: '#0a2540', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+                      ➕ Nueva ficha / víctima
                     </button>
                   </div>
                 )}
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px', borderTop: '0.5px solid #f0f0f0', paddingTop: '12px' }}>
-                  <button onClick={() => setSel(null)} style={{ padding: '8px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cerrar</button>
+                  <button onClick={() => { setSel(null); setFichas([]); }} style={{ padding: '8px 18px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', fontSize: '13px', color: '#6b7280' }}>Cerrar</button>
                 </div>
               </div>
             </div>
           );
         })()}
 
-        {fichaAbierta && sel && (
+        {fichaId && (
           <FichaPrehospitalaria
-            solicitudId={sel.solicitud?.id}
-            onCerrar={() => setFichaAbierta(false)}
-            onGuardado={() => { setFichaAbierta(false); setSel(null); cargar(); }}
+            fichaId={fichaId}
+            onCerrar={() => setFichaId(null)}
+            onGuardado={() => { setFichaId(null); if (sel?.solicitud?.id) cargarFichas(sel.solicitud.id); cargar(); }}
           />
         )}
       </div>

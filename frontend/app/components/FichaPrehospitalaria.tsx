@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import FirmaTouch from './FirmaTouch';
 
 interface Props {
-  solicitudId: number;
+  fichaId: number;
   onCerrar: () => void;
   onGuardado?: () => void;
 }
@@ -37,7 +37,7 @@ const Bloque = ({ children }: { children: any }) => (
   <div style={{ border: '0.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px' }}>{children}</div>
 );
 
-export default function FichaPrehospitalaria({ solicitudId, onCerrar, onGuardado }: Props) {
+export default function FichaPrehospitalaria({ fichaId, onCerrar, onGuardado }: Props) {
   const [f, setF] = useState<Datos>({});
   const [firmaPaciente, setFirmaPaciente] = useState<string | null>(null);
   const [firmaTestigo, setFirmaTestigo] = useState<string | null>(null);
@@ -46,6 +46,8 @@ export default function FichaPrehospitalaria({ solicitudId, onCerrar, onGuardado
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState('');
+  const [nroVictima, setNroVictima] = useState(1);
+  const [antecedentes, setAntecedentes] = useState<any[] | null>(null);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -62,27 +64,12 @@ export default function FichaPrehospitalaria({ solicitudId, onCerrar, onGuardado
   };
 
   useEffect(() => {
-    fetch(`http://localhost:3001/api/fichas/${solicitudId}`, { headers: headers() })
+    fetch(`http://localhost:3001/api/fichas/${fichaId}`, { headers: headers() })
       .then(r => r.json())
       .then(d => {
-        const p = d.precarga || {};
-        const base: Datos = {
-          p5_gcs_tipo: 'adulto',
-          dg_fecha: p.fecha ? new Date(p.fecha).toLocaleDateString('es-PY') : '',
-          dg_servicio: p.run_number || '',
-          dg_ci: p.paciente_documento || '',
-          p2_direccion: p.lugar_escena || '',
-          p3_nombre: p.paciente_nombre || '',
-          p3_edad: p.paciente_edad || '',
-          p3_sexo_m: p.paciente_sexo === 'M' || p.paciente_sexo === 'MASCULINO',
-          p3_sexo_f: p.paciente_sexo === 'F' || p.paciente_sexo === 'FEMENINO',
-          p3_telefono: p.llamante_telefono || '',
-          p3_residencia: p.paciente_direccion || '',
-          p4_detalles: p.motivo_consulta || '',
-          p5_pa: p.vs_bp || '', p5_fc: p.vs_hr || '', p5_fr: p.vs_rr || '',
-          p5_spo2: p.vs_spo2 || '', p5_temp: p.vs_temp || '', p5_glucemia: p.vs_rbs || '',
-        };
+        const base: Datos = { p5_gcs_tipo: 'adulto', ...(d.precarga || {}) };
         if (d.ficha) {
+          setNroVictima(d.ficha.nro_victima || 1);
           Object.assign(base, d.ficha.datos || {});
           const fi = d.ficha.datos?._firmas || {};
           setFirmaPaciente(fi.paciente || null);
@@ -95,15 +82,15 @@ export default function FichaPrehospitalaria({ solicitudId, onCerrar, onGuardado
       .catch(() => setMsg('No se pudo cargar la ficha'))
       .finally(() => setCargando(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [solicitudId]);
+  }, [fichaId]);
 
   const guardar = async (cerrar: boolean) => {
     if (cerrar && !firmaParamedico) { setMsg('Falta la firma del paramédico para cerrar el servicio.'); return; }
     setGuardando(true); setMsg('');
     const datos = { ...f, _firmas: { paciente: firmaPaciente, testigo: firmaTestigo, paramedico: firmaParamedico, medico: firmaMedico } };
     try {
-      const res = await fetch(`http://localhost:3001/api/fichas/${solicitudId}`, {
-        method: 'POST', headers: headers(),
+      const res = await fetch(`http://localhost:3001/api/fichas/${fichaId}`, {
+        method: 'PUT', headers: headers(),
         body: JSON.stringify({ datos, firma_entrega: firmaMedico, firma_prestador: firmaParamedico, cerrar }),
       });
       const d = await res.json();
@@ -112,6 +99,13 @@ export default function FichaPrehospitalaria({ solicitudId, onCerrar, onGuardado
       else setMsg('Borrador guardado ✓');
     } catch { setMsg('Error de conexión'); }
     finally { setGuardando(false); }
+  };
+
+  const verAntecedentes = async () => {
+    const ci = (f.dg_ci || '').trim();
+    if (!ci) { setMsg('Cargá la C.I. del paciente para buscar antecedentes.'); return; }
+    const r = await fetch(`http://localhost:3001/api/fichas/antecedentes/${encodeURIComponent(ci)}?excluir=${fichaId}`, { headers: headers() });
+    if (r.ok) setAntecedentes(await r.json());
   };
 
   // ---- helpers de campos (funciones, no componentes: conservan el foco) ----
@@ -186,10 +180,13 @@ export default function FichaPrehospitalaria({ solicitudId, onCerrar, onGuardado
       <div style={{ background: '#fff', borderRadius: '12px', width: '940px', maxWidth: '100%', boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
         <div style={{ position: 'sticky', top: 0, background: '#fff', borderBottom: '0.5px solid #e5e7eb', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '12px 12px 0 0', zIndex: 2 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#0a2540' }}>Ficha Prehospitalaria SEME — Servicio #{solicitudId}</h2>
-            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>MSPyBS · DIGIES · Servicio de Emergencias Médicas Extrahospitalaria</div>
+            <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#0a2540' }}>Ficha Prehospitalaria SEME · Víctima {nroVictima}</h2>
+            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>MSPyBS · DIGIES · SEME</div>
           </div>
-          <button onClick={onCerrar} style={{ background: 'transparent', border: 'none', fontSize: '22px', color: '#9ca3af', cursor: 'pointer' }}>×</button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button onClick={verAntecedentes} style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '7px', border: '0.5px solid #e5e7eb', background: 'transparent', cursor: 'pointer', color: '#0a2540' }}>🕑 Antecedentes</button>
+            <button onClick={onCerrar} style={{ background: 'transparent', border: 'none', fontSize: '22px', color: '#9ca3af', cursor: 'pointer' }}>×</button>
+          </div>
         </div>
 
         <div style={{ padding: '16px 20px' }}>
@@ -401,10 +398,31 @@ export default function FichaPrehospitalaria({ solicitudId, onCerrar, onGuardado
               {guardando ? 'Guardando...' : 'Guardar borrador'}
             </button>
             <button onClick={() => guardar(true)} disabled={guardando || cargando} style={{ padding: '9px 16px', borderRadius: '7px', border: 'none', background: '#15803d', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-              Cerrar servicio con la ficha
+              Cerrar ficha de esta víctima
             </button>
           </div>
         </div>
+
+        {antecedentes && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: '24px' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', width: '560px', maxWidth: '100%', maxHeight: '80vh', overflowY: 'auto', padding: '20px', boxShadow: '0 8px 32px rgba(0,0,0,.2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0a2540' }}>Antecedentes del paciente (CI {f.dg_ci})</h3>
+                <button onClick={() => setAntecedentes(null)} style={{ background: 'transparent', border: 'none', fontSize: '20px', color: '#9ca3af', cursor: 'pointer' }}>×</button>
+              </div>
+              {antecedentes.length === 0 ? (
+                <div style={{ fontSize: '13px', color: '#9ca3af' }}>Sin fichas anteriores registradas para esta cédula.</div>
+              ) : antecedentes.map((a: any) => (
+                <div key={a.id} style={{ border: '0.5px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', fontSize: '12px', color: '#374151' }}>
+                  <div style={{ color: '#6b7280' }}>{new Date(a.fecha).toLocaleString('es-PY')} · Servicio #{a.servicio_id}</div>
+                  {a.motivo && <div><b>Motivo:</b> {a.motivo}</div>}
+                  {a.evolucion && <div><b>Evolución:</b> {a.evolucion}</div>}
+                  {a.destino && <div><b>Destino:</b> {a.destino}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
