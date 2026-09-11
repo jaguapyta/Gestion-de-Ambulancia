@@ -32,6 +32,29 @@ Al ser el mismo origen, no hay problemas de CORS. El frontend se compila con
    - Si difieren, corregir los labels marcados `# <-- CONFIRMAR` en el compose.
 4. Que exista una carpeta `/opt/ambulancia` con permisos para el usuario que despliega.
 
+## Opción A — Despliegue por el panel (Docker Manager · Compose from URL)
+
+El compose NO trae secretos. En el Docker Manager, sección **Environment variables**
+del proyecto, cargá estas variables ANTES de desplegar (interpolan con `${...}`):
+
+```
+MARIADB_DATABASE=seme
+MARIADB_USER=seme_user
+MARIADB_PASSWORD=<password_db>
+MARIADB_ROOT_PASSWORD=<password_root>
+DATABASE_URL=mysql://seme_user:<password_db>@db:3306/seme
+JWT_SECRET=<secreto_largo_aleatorio>
+JWT_EXPIRES_IN=8h
+CORS_ORIGIN=https://ambulancia.columbiatcc.online
+```
+
+Luego: Compose from URL → el `docker-compose.produccion.yml` del repo → Deploy.
+Si el contenedor `db` queda *unhealthy*, casi siempre es que faltó cargar
+`MARIADB_ROOT_PASSWORD` (sin ella MariaDB no inicializa).
+
+Los datos iniciales (respaldo `backup_seme_seed.sql`) se restauran por consola/SSH
+igual que en la Opción B (paso "Restaurar en producción").
+
 ## Paso 1 — DNS (quien administre la zona de columbiatcc.online)
 
 Crear un registro **A**: `ambulancia` → `<IP_DEL_VPS>` (TTL 3600).

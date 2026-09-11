@@ -1,27 +1,41 @@
-# Despliegue de producción del SEME en el VPS compartido (Traefik + HTTPS).
+# Despliegue de producción del SEME en Hostinger Docker Manager (Traefik + HTTPS).
+#
 # Un solo subdominio con ruteo por path:
 #   ambulancia.columbiatcc.online/api        -> backend (Express :3001)
 #   ambulancia.columbiatcc.online/socket.io  -> backend (:3001)
 #   ambulancia.columbiatcc.online/*          -> frontend (Next :3000)
 #
-# Nombre de proyecto Compose: ambulancia  (usar SIEMPRE -p ambulancia)
+# IMPORTANTE (despliegue por PANEL / Compose from URL):
+# Este archivo NO trae secretos. Cargá estas variables en el Docker Manager
+# (sección "Environment variables" del proyecto) antes de desplegar:
 #
-# PENDIENTE de confirmar con el administrador del VPS (marcados con # <-- CONFIRMAR):
-#   - entrypoint HTTPS (referencia: websecure)
-#   - certresolver TLS (referencia: letsencrypt)
-#   - modo de red de Traefik (host o bridge). Este archivo asume modo HOST (CASO A).
-#     Si Traefik está en una red bridge, ver el bloque comentado al final.
+#   MARIADB_DATABASE=seme
+#   MARIADB_USER=seme_user
+#   MARIADB_PASSWORD=<password_db>
+#   MARIADB_ROOT_PASSWORD=<password_root>
+#   DATABASE_URL=mysql://seme_user:<password_db>@db:3306/seme
+#   JWT_SECRET=<secreto_largo_aleatorio>
+#   JWT_EXPIRES_IN=8h
+#   CORS_ORIGIN=https://ambulancia.columbiatcc.online
+#
+# PENDIENTE de confirmar con el administrador del VPS (labels marcados # <-- CONFIRMAR):
+#   entrypoint HTTPS (ref: websecure), certresolver (ref: letsencrypt) y el modo de
+#   red de Traefik (host o bridge; si es bridge ver bloque "CASO B" al final).
 
 services:
   db:
     image: mariadb:10.4
     restart: unless-stopped
-    env_file:
-      - /opt/ambulancia/config/runtime.env
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
     volumes:
       - ambulancia_db:/var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 40s
       interval: 10s
       timeout: 5s
       retries: 12
@@ -37,8 +51,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    env_file:
-      - /opt/ambulancia/config/runtime.env
+    environment:
+      PORT: "3001"
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      CORS_ORIGIN: ${CORS_ORIGIN}
     # Aplica el esquema con la DB ya lista y arranca el server.
     command: sh -c "npx prisma db push --skip-generate && node server.js"
     labels:
@@ -78,7 +96,7 @@ volumes:
 # ---------------------------------------------------------------------------
 # CASO B — SOLO si Traefik corre en una red BRIDGE (no en modo host).
 # Descomentar y reemplazar <RED_REAL_DEL_PROXY> por la red externa real del proxy.
-# Agregar a los servicios backend y frontend:  networks: [default, proxy]
+# Agregar a backend y frontend:  networks: [default, proxy]
 # y a cada uno el label:  "traefik.docker.network=<RED_REAL_DEL_PROXY>"
 #
 # networks:
