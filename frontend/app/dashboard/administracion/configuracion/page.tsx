@@ -16,6 +16,10 @@ export default function ConfiguracionPage() {
     ciudad: '',
     tiempo_sesion_minutos: '480',
     exigir_habilitacion_vigente: false,
+    alerta_solicitud_min: '15',
+    alerta_habilitacion_dias: '30',
+    alerta_excepcion_horas: '24',
+    alerta_cama_horas: '6',
   });
 
   useEffect(() => {
@@ -33,6 +37,10 @@ export default function ConfiguracionPage() {
           ciudad: data.ciudad ?? '',
           tiempo_sesion_minutos: data.tiempo_sesion_minutos?.toString() ?? '480',
           exigir_habilitacion_vigente: Boolean(data.exigir_habilitacion_vigente),
+          alerta_solicitud_min: data.alerta_solicitud_min?.toString() ?? '15',
+          alerta_habilitacion_dias: data.alerta_habilitacion_dias?.toString() ?? '30',
+          alerta_excepcion_horas: data.alerta_excepcion_horas?.toString() ?? '24',
+          alerta_cama_horas: data.alerta_cama_horas?.toString() ?? '6',
         });
       })
       .catch(err => console.error(err))
@@ -112,6 +120,33 @@ export default function ConfiguracionPage() {
                 <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
                   Actualmente: {Math.floor(parseInt(form.tiempo_sesion_minutos) / 60)}h {parseInt(form.tiempo_sesion_minutos) % 60}min
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Alertas y recordatorios */}
+          <div style={{ background: 'white', borderRadius: '10px', padding: '24px', border: '0.5px solid #e5e7eb', marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: '500', color: '#0a2540', margin: '0 0 4px' }}>🔔 Alertas y recordatorios</h2>
+            <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 16px' }}>Umbrales que disparan las alertas de la campanita.</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={labelStyle}>Solicitud sin despachar (minutos)</label>
+                <input type="number" min="1" value={form.alerta_solicitud_min} onChange={e => setForm({ ...form, alerta_solicitud_min: e.target.value })} style={inputStyle} />
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Avisa si una solicitud lleva más de este tiempo sin despacharse.</div>
+              </div>
+              <div>
+                <label style={labelStyle}>Habilitación por vencer (días antes)</label>
+                <input type="number" min="1" value={form.alerta_habilitacion_dias} onChange={e => setForm({ ...form, alerta_habilitacion_dias: e.target.value })} style={inputStyle} />
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Registro/licencia que vence dentro de estos días.</div>
+              </div>
+              <div>
+                <label style={labelStyle}>Excepción de acceso por vencer (horas antes)</label>
+                <input type="number" min="1" value={form.alerta_excepcion_horas} onChange={e => setForm({ ...form, alerta_excepcion_horas: e.target.value })} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Pedido de cama sin evolución (horas)</label>
+                <input type="number" min="1" value={form.alerta_cama_horas} onChange={e => setForm({ ...form, alerta_cama_horas: e.target.value })} style={inputStyle} />
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>Pedido de cama abierto sin una nueva llamada en este lapso.</div>
               </div>
             </div>
           </div>

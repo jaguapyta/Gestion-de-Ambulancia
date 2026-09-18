@@ -840,6 +840,10 @@ model configuracion {
   ciudad                      String?   @default("Asunción, Paraguay") @db.VarChar(100)
   tiempo_sesion_minutos       Int?      @default(480)
   exigir_habilitacion_vigente Boolean   @default(false)
+  alerta_solicitud_min        Int?      @default(15)   // #3 solicitud sin despachar (minutos)
+  alerta_habilitacion_dias    Int?      @default(30)   // #2 habilitación por vencer (días antes)
+  alerta_excepcion_horas      Int?      @default(24)   // #5 excepción de acceso por vencer (horas antes)
+  alerta_cama_horas           Int?      @default(6)    // #6 pedido de cama sin evolución (horas sin llamada)
   updated_at                  DateTime? @default(now()) @db.DateTime(0)
 }
 

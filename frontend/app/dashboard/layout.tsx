@@ -4,6 +4,7 @@ import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import CampanaAlertas from '../components/CampanaAlertas';
 import { puedeVer, type Seccion } from '../../lib/permisos';
 
 const menuItems: { href: string; label: string; seccion: Seccion }[] = [
@@ -107,9 +108,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
           })}
         </nav>
+        <CampanaAlertas />
 
         <div style={{ position: 'relative', marginLeft: '16px' }}>
           <div
+            
             onClick={() => setMenuAbierto(!menuAbierto)}
             style={{
               display: 'flex',
