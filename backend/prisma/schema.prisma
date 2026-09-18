@@ -594,6 +594,8 @@ model usuario {
     supervisor_habilitado_usuario     supervisor_habilitado[] @relation("supervisor_usuario")
   supervisor_habilitado_habilitador supervisor_habilitado[] @relation("supervisor_habilitador")
   arm_habilitado_habilitador    arm_habilitado[]     @relation("arm_habilitador")
+  acceso_excepcional_beneficiario acceso_excepcional[] @relation("excepcion_beneficiario")
+  acceso_excepcional_autorizador  acceso_excepcional[] @relation("excepcion_autorizador")  
   turno_regulacion              turno_regulacion[]
   prioridad_log                                             prioridad_log[]
   push_token                                                push_token[]
@@ -967,7 +969,25 @@ model auditoria {
   @@index([tabla], map: "idx_aud_tabla")
   @@index([usuario_id], map: "idx_aud_usuario")
 }
+// Autorización de acceso excepcional para ARM / médicos reguladores.
+// Permite que una jefatura los deje ingresar fuera de su turno de guardia
+// durante una ventana puntual [vigencia_inicio, vigencia_fin), con motivo.
+model acceso_excepcional {
+  id              Int      @id @default(autoincrement())
+  usuario_id      Int
+  vigencia_inicio DateTime @db.DateTime(0)
+  vigencia_fin    DateTime @db.DateTime(0)
+  motivo          String   @db.VarChar(255)
+  autorizado_por  Int
+  activo          Boolean  @default(true)
+  created_at      DateTime @default(now()) @db.DateTime(0)
+  usuario         usuario  @relation("excepcion_beneficiario", fields: [usuario_id], references: [id], onUpdate: Restrict, map: "fk_exc_usuario")
+  autorizador     usuario  @relation("excepcion_autorizador", fields: [autorizado_por], references: [id], onUpdate: Restrict, map: "fk_exc_autorizador")
 
+  @@index([usuario_id], map: "idx_exc_usuario")
+  @@index([autorizado_por], map: "idx_exc_autorizador")
+  @@index([vigencia_inicio, vigencia_fin], map: "idx_exc_vigencia")
+}
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model chatbot_confirmacion {
   id                   Int               @id @default(autoincrement())
@@ -1280,18 +1300,22 @@ model motivo_criterio {
 }
 
 model motivo_sinonimo {
-  id         Int             @id @default(autoincrement())
-  motivo_id  Int
-  texto      String          @db.VarChar(150)
-  origen     String          @default("MANUAL") @db.VarChar(10)   // SEED | MANUAL | IA
-  activo     Boolean         @default(true)
-  creado_por Int?
-  created_at DateTime        @default(now()) @db.DateTime(0)
-  motivo     motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_ms_motivo")
+  id               Int             @id @default(autoincrement())
+  motivo_id        Int
+  texto            String          @db.VarChar(150)
+  origen           String          @default("MANUAL") @db.VarChar(10)   // SEED | MANUAL | IA
+  estado           String          @default("APROBADO") @db.VarChar(10) // PENDIENTE | APROBADO | RECHAZADO
+  activo           Boolean         @default(true)
+  creado_por       Int?
+  aprobado_por     Int?
+  fecha_aprobacion DateTime?       @db.DateTime(0)
+  contexto         String?         @db.VarChar(255)   // relato/texto del llamante que originó la propuesta
+  created_at       DateTime        @default(now()) @db.DateTime(0)
+  motivo           motivo_consulta @relation(fields: [motivo_id], references: [id], onUpdate: Restrict, map: "fk_ms_motivo")
 
   @@index([motivo_id], map: "fk_ms_motivo")
+  @@index([estado], map: "idx_ms_estado")
 }
-
 model emergencia_respuesta {
   id                Int             @id @default(autoincrement())
   solicitud_id      Int

@@ -25,6 +25,7 @@ const grupos = [
       { href: '/dashboard/sala-operaciones/recursos-humanos/medicos', label: 'Médicos reguladores', icon: '🩺', roles: RRHH },
       { href: '/dashboard/sala-operaciones/recursos-humanos/arm', label: 'ARM', icon: '📻', roles: RRHH },
       { href: '/dashboard/sala-operaciones/recursos-humanos/supervisores', label: 'Supervisores', icon: '🎖️', roles: ['ADMINISTRADOR', 'COORDINADOR_REGULACION'] },
+      { href: '/dashboard/sala-operaciones/recursos-humanos/excepciones', label: 'Excepciones de acceso', icon: '🔓', roles: RRHH },
     ],
   },
 ];

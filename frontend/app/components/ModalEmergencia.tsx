@@ -30,6 +30,10 @@ export default function ModalEmergencia({ telefono, nombre, onCerrar, onGuardado
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState('');
   const [exito, setExito] = useState<any>(null);
+  const [sugerencias, setSugerencias] = useState<any[]>([]);
+  const [sugModo, setSugModo] = useState('');
+  const [buscandoIA, setBuscandoIA] = useState(false);
+  const [textoIA, setTextoIA] = useState('');
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapObj = useRef<any>(null);
@@ -86,6 +90,40 @@ export default function ModalEmergencia({ telefono, nombre, onCerrar, onGuardado
       setMotivos(ms => ms.map(m => m.id === sel.id ? { ...m, sinonimos: [...(m.sinonimos ?? []), { texto: synText.trim() }] } : m));
       setSynText(''); setAddSyn(false); setMsg('Sinónimo agregado');
     }
+  };
+
+  // Pide a la IA los motivos más cercanos a lo que dijo el llamante.
+  const sugerirIA = async () => {
+    const texto = q.trim();
+    if (!texto) { setMsg('Escribí lo que dice el llamante para sugerir.'); return; }
+    setBuscandoIA(true); setSugerencias([]); setSugModo(''); setMsg('');
+    try {
+      const res = await fetch(`${API_URL}/api/emergencias/sugerir-motivo`, { method: 'POST', headers: headers(), body: JSON.stringify({ texto }) });
+      const d = await res.json();
+      if (res.ok) {
+        setSugerencias(d.sugerencias || []); setSugModo(d.modo || ''); setTextoIA(texto);
+        if (!(d.sugerencias || []).length) setMsg('La IA no encontró un motivo parecido. Elegí de la lista.');
+      } else setMsg(d.error || 'No se pudo sugerir');
+    } catch { setMsg('Error de conexión con la IA'); }
+    finally { setBuscandoIA(false); }
+  };
+
+  // Al elegir una sugerencia: selecciona el motivo y propone el texto tipeado
+  // como sinónimo (queda PENDIENTE si lo carga un recepcionista).
+  const elegirSugerencia = async (s: any) => {
+    const m = motivos.find(x => x.id === s.id) || s;
+    elegirMotivo(m);
+    const texto = textoIA.trim();
+    setSugerencias([]); setSugModo('');
+    if (!texto || texto.toLowerCase() === String(m.nombre || '').toLowerCase()) return;
+    try {
+      const res = await fetch(`${API_URL}/api/emergencias/sinonimos`, {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ motivo_id: m.id, texto, origen: 'IA', contexto: relato || texto }),
+      });
+      const d = await res.json();
+      if (res.ok) setMsg(d.estado === 'APROBADO' ? `Sinónimo "${texto}" agregado.` : `Sinónimo "${texto}" propuesto — pendiente del visto bueno de un jefe.`);
+    } catch { /* no bloquea la carga de la emergencia */ }
   };
 
   const guardar = async () => {
@@ -153,7 +191,32 @@ export default function ModalEmergencia({ telefono, nombre, onCerrar, onGuardado
         <div style={seccion}>1 · Motivo de consulta</div>
         {!sel ? (
           <>
-            <input type="text" placeholder="Buscar… (ej: desmayo, no puede respirar, choque, dolor de panza)" value={q} onChange={e => setQ(e.target.value)} style={{ ...input, marginBottom: '10px' }} />
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <input type="text" placeholder="Buscar / escribir lo que dice el llamante…" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sugerirIA(); }} style={{ ...input, flex: 1, marginBottom: 0 }} />
+              <button onClick={sugerirIA} disabled={buscandoIA || !q.trim()} title="Sugerir el motivo a partir de lo que dice el llamante" style={{ padding: '0 14px', borderRadius: '7px', border: 'none', background: buscandoIA || !q.trim() ? '#c7d2fe' : '#4f46e5', color: 'white', cursor: buscandoIA || !q.trim() ? 'default' : 'pointer', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {buscandoIA ? 'Sugiriendo…' : '🤖 Sugerir con IA'}
+              </button>
+            </div>
+
+            {sugerencias.length > 0 && (
+              <div style={{ border: '1px solid #ddd6fe', background: '#f5f3ff', borderRadius: '8px', padding: '8px', marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', color: '#6d28d9', fontWeight: 600, marginBottom: '6px' }}>
+                  Sugerencias de la IA {sugModo === 'simulado' && <span style={{ fontWeight: 400, color: '#9ca3af' }}>(modo simulado — sin API key)</span>}
+                </div>
+                {sugerencias.map((s: any) => {
+                  const c = COLORES[s.color] ?? COLORES.AZUL;
+                  return (
+                    <div key={s.id} onClick={() => elegirSugerencia(s)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 8px', borderRadius: '6px', cursor: 'pointer', background: 'white', border: '0.5px solid #ede9fe', marginBottom: '4px' }}>
+                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: c.hex, flexShrink: 0 }} />
+                      <span style={{ fontSize: '13px', color: '#0a2540', flex: 1 }}>{s.nombre}</span>
+                      <span style={{ fontSize: '10px', color: '#9ca3af' }}>{s.codigo}</span>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Al elegir una, el texto “{textoIA}” queda propuesto como sinónimo (lo revisa un jefe).</div>
+              </div>
+            )}
+
             <div style={{ maxHeight: '280px', overflowY: 'auto', border: '0.5px solid #f0f0f0', borderRadius: '8px' }}>
               {filtrados.map(m => {
                 const c = COLORES[m.color] ?? COLORES.AZUL;
@@ -167,7 +230,7 @@ export default function ModalEmergencia({ telefono, nombre, onCerrar, onGuardado
                   </div>
                 );
               })}
-              {filtrados.length === 0 && <div style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '12px' }}>Sin resultados — elegí el motivo correcto de la lista y agregá el término como sinónimo desde el paso siguiente.</div>}
+              {filtrados.length === 0 && <div style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '12px' }}>Sin resultados — probá “🤖 Sugerir con IA”, o elegí el motivo de la lista.</div>}
             </div>
           </>
         ) : (

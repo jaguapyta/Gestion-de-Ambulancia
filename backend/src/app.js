@@ -45,5 +45,7 @@ app.use('/api/regulacion/camas', require('./routes/regulacion.routes'));
 app.use('/api/emergencias', require('./routes/emergencias.routes'));
 app.use('/api/servicios', require('./routes/servicios.routes'));
 app.use('/api/fichas', require('./routes/ficha.routes'));
+app.use('/api/auditoria', require('./routes/auditoria.routes'));
+app.use('/api/excepciones-acceso', require('./routes/excepciones-acceso.routes'));
 
 module.exports = app;
