@@ -7,6 +7,7 @@ import ModalPedidoCama from '../../../components/ModalPedidoCama';
 import ModalTraslado from '../../../components/ModalTraslado';
 import ModalDialisis from '../../../components/ModalDialisis';
 import ModalEmergencia from '../../../components/ModalEmergencia';
+import IncidentesParecidos from '../../../components/IncidentesParecidos';
 
 
 interface Cat { id: number; nombre?: string; descripcion?: string; codigo?: string; }
@@ -224,6 +225,9 @@ export default function RecepcionPage() {
                 <input value={callNombre} onChange={e => setCallNombre(e.target.value)} style={input} /></div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            {telefonoValido(callTel) && (
+              <IncidentesParecidos telefono={callTel} nombre={callNombre} onSumada={() => { setModalTipo(false); cargar(); }} />
+            )}
               {TIPOS.map(t => {
                 const habil = t.activo && telefonoValido(callTel);
                 return (
@@ -291,6 +295,19 @@ export default function RecepcionPage() {
             </div>
 
             {(detalle as any).despacho?.[0]?.rol_guardia_movil && (() => {
+            {((detalle as any).llamada?.length ?? 0) > 0 && (
+              <div style={{ border: '0.5px solid #e5e7eb', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540', marginBottom: '8px' }}>📞 Llamadas ({(detalle as any).llamada.length})</div>
+                {(detalle as any).llamada.map((l: any) => (
+                  <div key={l.id} style={{ fontSize: '12px', color: '#374151', borderBottom: '0.5px solid #f3f4f6', padding: '6px 0' }}>
+                    <div>{l.es_principal ? '⭐ ' : ''}{l.denunciante_nombre ?? 's/nombre'} · {l.denunciante_telefono ?? 's/tel'}
+                      <span style={{ color: '#9ca3af' }}> — {new Date(l.created_at).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    {l.relato ? <div style={{ color: '#6b7280' }}>{l.relato}</div> : null}
+                  </div>
+                ))}
+              </div>
+            )}          
               const rgm: any = (detalle as any).despacho[0].rol_guardia_movil;
               return (
                 <div style={{ border: '0.5px solid #bfdbfe', background: '#eff6ff', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>

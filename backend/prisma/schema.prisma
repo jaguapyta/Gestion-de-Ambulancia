@@ -29,6 +29,7 @@ model canal_ingreso {
   descripcion String?     @db.VarChar(150)
   activo      Boolean     @default(true)
   solicitud   solicitud[]
+  llamada     llamada[]  
 }
 
 model condicion_paciente {
@@ -325,6 +326,7 @@ regulacion_llamada regulacion_llamada[]
   chatbot_confirmacion    chatbot_confirmacion[]
   cobertura               cobertura[]
   despacho                despacho[]
+  llamada                 llamada[]  
   historial_solicitud     historial_solicitud[]
   inotripicos             inotripicos[]
   notificacion            notificacion[]
@@ -582,6 +584,7 @@ model usuario {
   historial_solicitud                                       historial_solicitud[]
   horario_guardia                                           horario_guardia[]
   inotripicos                                               inotripicos[]
+  llamada                                                   llamada[]  
   orden_trabajo_orden_trabajo_asistente_idTousuario         orden_trabajo[]            @relation("orden_trabajo_asistente_idTousuario")
   orden_trabajo_orden_trabajo_coordinador_trans_idTousuario orden_trabajo[]            @relation("orden_trabajo_coordinador_trans_idTousuario")
   orden_trabajo_conductor                                   orden_trabajo_transporte[] @relation("orden_conductor")
@@ -844,6 +847,7 @@ model configuracion {
   alerta_habilitacion_dias    Int?      @default(30)   // #2 habilitación por vencer (días antes)
   alerta_excepcion_horas      Int?      @default(24)   // #5 excepción de acceso por vencer (horas antes)
   alerta_cama_horas           Int?      @default(6)    // #6 pedido de cama sin evolución (horas sin llamada)
+ incidente_parecido_horas    Int?      @default(2)    // dedup: buscar incidentes abiertos de las últimas N horas  
   updated_at                  DateTime? @default(now()) @db.DateTime(0)
 }
 
@@ -1331,4 +1335,24 @@ model emergencia_respuesta {
 
   @@index([solicitud_id], map: "fk_er_solicitud")
   @@index([motivo_pregunta_id], map: "fk_er_pregunta")
+}
+// Cada comunicación entrante. Un incidente (solicitud) puede tener varias llamadas
+// (p. ej. varios testigos del mismo hecho). La principal es la que originó el incidente.
+model llamada {
+  id                   Int           @id @default(autoincrement())
+  solicitud_id         Int
+  recepcionista_id     Int
+  canal_ingreso_id     Int           @db.UnsignedTinyInt
+  denunciante_nombre   String?       @db.VarChar(200)
+  denunciante_telefono String?       @db.VarChar(20)
+  relato               String?       @db.Text
+  es_principal         Boolean       @default(false)
+  created_at           DateTime      @default(now()) @db.DateTime(0)
+  solicitud            solicitud     @relation(fields: [solicitud_id], references: [id], onUpdate: Restrict, map: "fk_llamada_solicitud")
+  canal_ingreso        canal_ingreso @relation(fields: [canal_ingreso_id], references: [id], onUpdate: Restrict, map: "fk_llamada_canal")
+  usuario              usuario       @relation(fields: [recepcionista_id], references: [id], onUpdate: Restrict, map: "fk_llamada_recepcionista")
+
+  @@index([solicitud_id], map: "idx_llamada_solicitud")
+  @@index([canal_ingreso_id], map: "fk_llamada_canal")
+  @@index([recepcionista_id], map: "fk_llamada_recepcionista")
 }

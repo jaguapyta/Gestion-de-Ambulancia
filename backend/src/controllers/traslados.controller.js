@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const { crearLlamadaPrincipal } = require('../services/llamadas');
 
 const TIPO_TRASLADO = 2;   // tipo_solicitud TRASLADO
 const ESTADO_PENDIENTE = 1;
@@ -109,6 +110,7 @@ const crearTraslado = async (req, res) => {
       }
 
       await tx.historial_solicitud.create({ data: { solicitud_id: solicitud.id, estado_nuevo_id: ESTADO_PENDIENTE, usuario_id: req.usuario.id, observacion: 'Traslado recepcionado' } });
+      await crearLlamadaPrincipal(tx, solicitud, req.usuario.id);
       return solicitud;
     });
 

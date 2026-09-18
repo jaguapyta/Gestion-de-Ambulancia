@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const { crearLlamadaPrincipal } = require('../services/llamadas');
 
 // Catálogos para los formularios de recepción
 const getCatalogos = async (req, res) => {
@@ -70,6 +71,7 @@ const getSolicitudById = async (req, res) => {
         tipo_servicio: true,
         canal_ingreso: true,
         estado_solicitud: true,
+        llamada: { orderBy: { created_at: 'asc' }, include: { usuario: { include: { persona: true } }, canal_ingreso: true } },        
         persona: true,
         usuario: { include: { persona: true } },
         solicitud_ref_cama: true,
@@ -159,6 +161,7 @@ const crearSolicitud = async (req, res) => {
           observacion: 'Solicitud recepcionada',
         },
       });
+      await crearLlamadaPrincipal(tx, s, req.usuario.id);
       return s;
     });
 
@@ -206,4 +209,65 @@ const cambiarEstado = async (req, res) => {
   }
 };
 
-module.exports = { getCatalogos, getSolicitudes, getSolicitudById, crearSolicitud, cambiarEstado };
+const TERMINALES = [7, 8, 9, 10, 11, 12];
+
+// Incidentes (emergencias) abiertos de la misma zona en las últimas N horas — para el dedup en recepción.
+const incidentesParecidos = async (req, res) => {
+  const { ciudad, barrio } = req.query;
+  try {
+    const cfg = await prisma.configuracion.findUnique({ where: { id: 1 } });
+    const horas = cfg?.incidente_parecido_horas ?? 2;
+    const desde = new Date(Date.now() - horas * 3600000);
+    const zona = [];
+    if (ciudad) zona.push({ ciudad });
+    if (barrio) zona.push({ barrio });
+    const incidentes = await prisma.solicitud.findMany({
+      where: {
+        tipo_solicitud_id: 1,
+        estado_solicitud_id: { notIn: TERMINALES },
+        created_at: { gte: desde },
+        ...(zona.length ? { OR: zona } : {}),
+      },
+      orderBy: { created_at: 'desc' },
+      take: 20,
+      select: {
+        id: true, direccion: true, barrio: true, ciudad: true, created_at: true,
+        estado_solicitud: { select: { nombre: true } },
+        solicitud_emergencia: { select: { motivo_consulta: { select: { nombre: true, codigo_radial: true } } } },
+        _count: { select: { llamada: true } },
+      },
+    });
+    res.json(incidentes);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al buscar incidentes parecidos' });
+  }
+};
+
+// Agrega una llamada (no principal) a un incidente ya existente.
+const agregarLlamada = async (req, res) => {
+  const { id } = req.params;
+  const { denunciante_nombre, denunciante_telefono, relato, canal_ingreso_id } = req.body;
+  try {
+    const sid = parseInt(id);
+    const sol = await prisma.solicitud.findUnique({ where: { id: sid }, select: { id: true, canal_ingreso_id: true } });
+    if (!sol) return res.status(404).json({ error: 'Incidente no encontrado' });
+    const llamada = await prisma.llamada.create({
+      data: {
+        solicitud_id: sid,
+        recepcionista_id: req.usuario.id,
+        canal_ingreso_id: canal_ingreso_id ? parseInt(canal_ingreso_id) : sol.canal_ingreso_id,
+        denunciante_nombre: denunciante_nombre ?? null,
+        denunciante_telefono: denunciante_telefono ?? null,
+        relato: relato ?? null,
+        es_principal: false,
+      },
+    });
+    res.status(201).json(llamada);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al agregar la llamada' });
+  }
+};
+
+module.exports = { getCatalogos, getSolicitudes, getSolicitudById, crearSolicitud, cambiarEstado, incidentesParecidos, agregarLlamada };

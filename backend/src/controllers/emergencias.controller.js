@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const socket = require('../socket');
 const { sugerirMotivos } = require('../services/ia-gemini');
+const { crearLlamadaPrincipal } = require('../services/llamadas');
 
 const int = v => { const n = parseInt(v); return isNaN(n) ? null : n; };
 const ORDEN_COLOR = { ROJO: 0, AMARILLO: 1, VERDE: 2, AZUL: 3 };
@@ -86,6 +87,7 @@ const crearEmergencia = async (req, res) => {
           motivo: origen === 'ALGORITMO' ? 'Clasificación automática (algoritmo SEME)' : 'Ajuste del recepcionista',
         },
       });
+      await crearLlamadaPrincipal(tx, sol, req.usuario.id, { relato: b.relato || null });
       return sol;
     });
 

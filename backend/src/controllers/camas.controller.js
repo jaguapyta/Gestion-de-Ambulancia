@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const { crearLlamadaPrincipal } = require('../services/llamadas');
 
 const TIPO_REF_CAMA = 3;   // tipo_solicitud PED_CAMA
 const ESTADO_PENDIENTE = 1;
@@ -163,6 +164,7 @@ const crearPedidoCama = async (req, res) => {
       if (haySignos) await tx.signos_vitales.create({ data: signosData(s, solicitud.id, req.usuario.id) });
       if (inotroRows.length) await tx.inotripicos.createMany({ data: inotroRows.map((r) => ({ solicitud_id: solicitud.id, usuario_id: req.usuario.id, ...r })) });
       await tx.historial_solicitud.create({ data: { solicitud_id: solicitud.id, estado_nuevo_id: ESTADO_PENDIENTE, usuario_id: req.usuario.id, observacion: 'Pedido de cama recepcionado' } });
+      await crearLlamadaPrincipal(tx, solicitud, req.usuario.id);
       return solicitud;
     });
     res.status(201).json({ ...creada, tipo_pedido: 'NUEVO' });
