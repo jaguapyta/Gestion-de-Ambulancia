@@ -13,8 +13,10 @@ const getConfiguracion = async (req, res) => {
 const updateConfiguracion = async (req, res) => {
   const {
     nombre_sistema, telefono_emergencias, direccion, ciudad,
-    tiempo_sesion_minutos, exigir_habilitacion_vigente
+    tiempo_sesion_minutos, exigir_habilitacion_vigente,
+    alerta_solicitud_min, alerta_habilitacion_dias, alerta_excepcion_horas, alerta_cama_horas,
   } = req.body;
+  const num = (v) => (v === undefined || v === null || v === '' ? undefined : parseInt(v));
   try {
     const config = await prisma.configuracion.update({
       where: { id: 1 },
@@ -24,11 +26,13 @@ const updateConfiguracion = async (req, res) => {
         direccion,
         ciudad,
         tiempo_sesion_minutos: parseInt(tiempo_sesion_minutos),
-        // Si el campo no viene en el body se conserva el valor actual, para que
-        // la pantalla de Configuración pueda actualizarse sin pisarlo.
         ...(exigir_habilitacion_vigente !== undefined && {
           exigir_habilitacion_vigente: Boolean(exigir_habilitacion_vigente)
-        })
+        }),
+        ...(num(alerta_solicitud_min) !== undefined && { alerta_solicitud_min: num(alerta_solicitud_min) }),
+        ...(num(alerta_habilitacion_dias) !== undefined && { alerta_habilitacion_dias: num(alerta_habilitacion_dias) }),
+        ...(num(alerta_excepcion_horas) !== undefined && { alerta_excepcion_horas: num(alerta_excepcion_horas) }),
+        ...(num(alerta_cama_horas) !== undefined && { alerta_cama_horas: num(alerta_cama_horas) }),
       }
     });
     res.json(config);
