@@ -678,6 +678,13 @@ model despacho {
   hora_despacho        DateTime          @default(now()) @db.DateTime(0)
   hora_en_escena       DateTime?         @db.DateTime(0)
   hora_fin             DateTime?         @db.DateTime(0)
+  hora_recibido        DateTime?         @db.DateTime(0)
+  hora_en_camino       DateTime?         @db.DateTime(0)
+  hora_en_destino      DateTime?         @db.DateTime(0)
+  km_inicio            Int?              @db.UnsignedInt
+  km_fin               Int?              @db.UnsignedInt
+  motivo_cambio        String?           @db.Text
+  cancelacion_tipo     String?           @db.VarChar(20)
   condicion_cierre_id  Int?              @db.UnsignedTinyInt
   created_at           DateTime          @default(now()) @db.DateTime(0)
   updated_at           DateTime          @default(now()) @db.DateTime(0)
@@ -847,7 +854,8 @@ model configuracion {
   alerta_habilitacion_dias    Int?      @default(30)   // #2 habilitación por vencer (días antes)
   alerta_excepcion_horas      Int?      @default(24)   // #5 excepción de acceso por vencer (horas antes)
   alerta_cama_horas           Int?      @default(6)    // #6 pedido de cama sin evolución (horas sin llamada)
- incidente_parecido_horas    Int?      @default(2)    // dedup: buscar incidentes abiertos de las últimas N horas  
+ incidente_parecido_horas    Int?      @default(2)    // dedup: buscar incidentes abiertos de las últimas N horas
+  movil_demorado_min          Int?      @default(30)   // alerta: móvil demasiado tiempo en un estado sin avanzar  
   updated_at                  DateTime? @default(now()) @db.DateTime(0)
 }
 

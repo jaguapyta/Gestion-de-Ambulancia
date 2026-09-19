@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const { avanzarEstado } = require('../services/estados-despacho');
 const int = v => { const n = parseInt(v); return isNaN(n) ? null : n; };
 const MAP_SOL = { 1: 3, 2: 5, 3: 6, 4: 7, 5: 9 };
 const H24 = 24 * 3600 * 1000;
@@ -61,27 +62,24 @@ const getServicio = async (req, res) => {
 const cambiarEstado = async (req, res) => {
   try {
     const id = int(req.params.id);
-    const { estado_despacho_id, condicion_cierre_id } = req.body;
     const d = await prisma.despacho.findUnique({ where: { id }, include: { rol_guardia_movil: { include: { tripulacion: true } } } });
     if (!d) return res.status(404).json({ error: 'Servicio no encontrado' });
     const enTrip = d.rol_guardia_movil?.tripulacion?.some(t => t.usuario_id === req.usuario.id && t.activo);
     if (!enTrip && req.usuario.rol !== 'ADMINISTRADOR') return res.status(403).json({ error: 'No pertenecés a la tripulación' });
     if (!editable(d)) return res.status(403).json({ error: 'El servicio ya no es editable (pasaron 24 h de la asignación)' });
-    const nuevo = int(estado_despacho_id);
-    if (!MAP_SOL[nuevo]) return res.status(400).json({ error: 'Estado inválido' });
-    const cerrado = nuevo === 4 || nuevo === 5;
-    await prisma.$transaction(async (tx) => {
-      const dataD = { estado_despacho_id: nuevo };
-      if (nuevo === 2) dataD.hora_en_escena = new Date();
-      if (cerrado) { dataD.hora_fin = new Date(); if (condicion_cierre_id) dataD.condicion_cierre_id = int(condicion_cierre_id); }
-      await tx.despacho.update({ where: { id }, data: dataD });
-      const sol = await tx.solicitud.findUnique({ where: { id: d.solicitud_id } });
-      await tx.solicitud.update({ where: { id: d.solicitud_id }, data: { estado_solicitud_id: MAP_SOL[nuevo] } });
-      await tx.historial_solicitud.create({ data: { solicitud_id: d.solicitud_id, estado_anterior_id: sol.estado_solicitud_id, estado_nuevo_id: MAP_SOL[nuevo], usuario_id: req.usuario.id, observacion: 'Tripulación: estado ' + nuevo } });
-      if (cerrado) await tx.rol_guardia_movil.update({ where: { id: d.rol_guardia_movil_id }, data: { estado: 'DISPONIBLE' } });
-    });
+    const { estado_despacho_id, condicion_cierre_id, km_inicio, km_fin, motivo } = req.body;
+    const r = await avanzarEstado({ despachoId: id, nuevo: int(estado_despacho_id), usuarioId: req.usuario.id, condicion_cierre_id, km_inicio, km_fin, motivo });
+    if (!r.ok) return res.status(r.status || 500).json({ error: r.error });
     res.json({ ok: true });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error al cambiar el estado' }); }
 };
 
-module.exports = { getMisServicios, getServicio, cambiarEstado };
+// Catálogo para la vista de la tripulación (condiciones de cierre)
+const getCatalogos = async (req, res) => {
+  try {
+    const condiciones_cierre = await prisma.condicion_cierre.findMany({ where: { activo: true }, orderBy: { id: 'asc' } });
+    res.json({ condiciones_cierre });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Error al obtener catálogos' }); }
+};
+
+module.exports = { getMisServicios, getServicio, cambiarEstado, getCatalogos };

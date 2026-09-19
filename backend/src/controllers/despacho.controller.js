@@ -1,18 +1,25 @@
 const prisma = require('../config/db');
 const socket = require('../socket');
+const { avanzarEstado } = require('../services/estados-despacho');
 
 const int = v => { const n = parseInt(v); return isNaN(n) ? null : n; };
 
-const ABIERTOS = [1, 2]; // PENDIENTE, EN_PROCESO
-// estado_despacho -> estado_solicitud
-const MAP_SOL = { 1: 3, 2: 5, 3: 6, 4: 7, 5: 9 };
-// Estados de solicitud terminales: salen del tablero operativo y pasan al histórico.
-// 7 FINALIZADA · 8 CERRADA · 9 CANCELADA · 10 FALSA_ALARMA · 11 NO_CONFIRMADA · 12 RESUELTO
+// estado_despacho -> estado_solicitud (ids reales del catálogo)
+const MAP_SOL = { 1: 3, 6: 13, 7: 4, 2: 5, 3: 6, 8: 14, 4: 7, 5: 9 };
+// Nombres para el historial
+const NOMBRE_DESP = { 1: 'DESPACHADO', 6: 'RECIBIDO', 7: 'EN CAMINO', 2: 'EN ESCENA', 3: 'TRASLADANDO', 8: 'EN DESTINO', 4: 'FINALIZADO', 5: 'CANCELADO' };
+// Transiciones permitidas: desde -> [estados a los que puede pasar]
+const TRANSICIONES = { 1: [6, 5], 6: [7, 5], 7: [2, 5], 2: [3, 4, 5], 3: [8], 8: [4] };
+// Hora que se sella al entrar a cada estado
+const HORA_ESTADO = { 6: 'hora_recibido', 7: 'hora_en_camino', 2: 'hora_en_escena', 8: 'hora_en_destino' };
+const FINALES = [4, 5];        // FINALIZADO, CANCELADO
+const PRE_ESCENA = [1, 6, 7];  // antes de llegar al lugar: se puede reasignar / cambiar prioridad / cancelar asignación
+// Estados de solicitud terminales (salen del tablero al histórico).
 const TERMINALES = [7, 8, 9, 10, 11, 12];
 
-// Móvil asignado activo (para las tarjetas del tablero).
+// Móvil asignado activo (para las tarjetas del tablero). Activos = no terminales del despacho.
 const despachoActivo = {
-  where: { estado_despacho_id: { in: [1, 2, 3] } },
+  where: { estado_despacho_id: { in: [1, 6, 7, 2, 3, 8] } },
   orderBy: { id: 'desc' }, take: 1,
   include: {
     estado_despacho: true,
@@ -25,7 +32,6 @@ const despachoActivo = {
   },
 };
 
-// Último despacho sin filtrar por estado (para el histórico: el servicio ya está cerrado).
 const despachoUltimo = {
   orderBy: { id: 'desc' }, take: 1,
   include: {
@@ -51,7 +57,6 @@ const getCatalogos = async (req, res) => {
 
 const getTablero = async (req, res) => {
   try {
-    // Emergencias (columna izquierda) — quedan a la vista hasta que terminan; pendientes primero.
     const emergencias = await prisma.solicitud.findMany({
       where: { tipo_solicitud_id: 1, estado_solicitud_id: { notIn: TERMINALES } },
       include: {
@@ -63,10 +68,9 @@ const getTablero = async (req, res) => {
     });
     emergencias.sort((a, b) => (a.estado_solicitud.nombre === 'PENDIENTE' ? 0 : 1) - (b.estado_solicitud.nombre === 'PENDIENTE' ? 0 : 1));
 
-    // Traslados (debajo del mapa) — por hora: TRASLADO + CAMA (SEME + enviado a despacho)
     const traslados = await prisma.solicitud.findMany({
       where: {
-        estado_solicitud_id: { notIn: TERMINALES },   // salen del tablero al terminar
+        estado_solicitud_id: { notIn: TERMINALES },
         OR: [
           { tipo_solicitud_id: 2 },
           { tipo_solicitud_id: 3, regulacion_cama: { enviado_despacho: true, quien_traslada: 'SEME' } },
@@ -84,21 +88,14 @@ const getTablero = async (req, res) => {
       return new Date(ha) - new Date(hb);
     });
 
-    // Móviles de guardia (columna derecha + mapa) — solo los VIGENTES por horario.
-    // Ventana semiabierta [inicio, fin): inicio inclusivo, fin exclusivo.
-    // Así el móvil deja de verse/despacharse fuera de su horario, sin activar/desactivar manual.
     const ahora = new Date();
     const moviles = await prisma.rol_guardia_movil.findMany({
-      where: {
-        activo: true,
-        vigencia_inicio: { lte: ahora },
-        vigencia_fin: { gt: ahora },
-      },
+      where: { activo: true, vigencia_inicio: { lte: ahora }, vigencia_fin: { gt: ahora } },
       include: {
         base: true, tipo_soporte: true, movil: true,
         tripulacion: { where: { activo: true }, include: { usuario: { include: { persona: true } } } },
         despacho: {
-          where: { estado_despacho_id: { in: [1, 2, 3] } },
+          where: { estado_despacho_id: { in: [1, 6, 7, 2, 3, 8] } },
           orderBy: { id: 'desc' }, take: 1,
           include: { estado_despacho: true, solicitud: true },
         },
@@ -109,7 +106,6 @@ const getTablero = async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error al cargar el tablero' }); }
 };
 
-// Histórico de despacho: emergencias y traslados ya terminados (estados terminales).
 const getHistorial = async (req, res) => {
   try {
     const solicitudes = await prisma.solicitud.findMany({
@@ -134,24 +130,19 @@ const getHistorial = async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error al cargar el histórico' }); }
 };
 
-// El despachante marca/corrige la ubicación del incidente en el mapa
 const setUbicacion = async (req, res) => {
   const { id } = req.params;
   const { latitud, longitud, direccion } = req.body;
   try {
     const s = await prisma.solicitud.update({
       where: { id: int(id) },
-      data: {
-        latitud: latitud ?? null, longitud: longitud ?? null,
-        ...(direccion !== undefined ? { direccion } : {}),
-      },
+      data: { latitud: latitud ?? null, longitud: longitud ?? null, ...(direccion !== undefined ? { direccion } : {}) },
     });
     socket.cambioEstadoSolicitud(s);
     res.json(s);
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error al guardar la ubicación' }); }
 };
 
-// Asignar un móvil a una solicitud
 const asignar = async (req, res) => {
   const { solicitud_id, rol_guardia_movil_id, prioridad, observacion } = req.body;
   try {
@@ -179,12 +170,11 @@ const asignar = async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error al asignar el móvil' }); }
 };
 
-// Reasignar el móvil de un despacho.
-//  - EMERGENCIA: solo mientras el móvil no llegó al lugar (estado_despacho DESPACHADO=1).
-//                Cuando la tripulación marca "en el lugar" (2) ya no se puede cambiar.
-//  - TRASLADO / CAMA: se puede reasignar mientras el servicio no esté cerrado (4 FINALIZADO / 5 CANCELADO).
+// Reasignar el móvil.
+//  - EMERGENCIA: solo antes de llegar al lugar (estados 1/6/7).
+//  - TRASLADO / CAMA: mientras no esté cerrado (4 FINALIZADO / 5 CANCELADO).
 const reasignar = async (req, res) => {
-  const { id } = req.params;                       // id del despacho
+  const { id } = req.params;
   const { rol_guardia_movil_id, observacion } = req.body;
   try {
     const did = int(id), nuevoMovil = int(rol_guardia_movil_id);
@@ -194,15 +184,13 @@ const reasignar = async (req, res) => {
     if (!d) return res.status(404).json({ error: 'Despacho no encontrado' });
 
     const esEmergencia = d.solicitud?.tipo_solicitud_id === 1;
-    if (esEmergencia && d.estado_despacho_id !== 1) {
+    if (esEmergencia && !PRE_ESCENA.includes(d.estado_despacho_id)) {
       return res.status(409).json({ error: 'La emergencia ya está en el lugar: no se puede reasignar el móvil' });
     }
-    if (!esEmergencia && [4, 5].includes(d.estado_despacho_id)) {
+    if (!esEmergencia && FINALES.includes(d.estado_despacho_id)) {
       return res.status(409).json({ error: 'El servicio ya está cerrado: no se puede reasignar el móvil' });
     }
-    if (d.rol_guardia_movil_id === nuevoMovil) {
-      return res.status(400).json({ error: 'Es el mismo móvil' });
-    }
+    if (d.rol_guardia_movil_id === nuevoMovil) return res.status(400).json({ error: 'Es el mismo móvil' });
     const movilNuevo = await prisma.rol_guardia_movil.findUnique({ where: { id: nuevoMovil } });
     if (!movilNuevo || !movilNuevo.activo) return res.status(404).json({ error: 'Móvil no disponible' });
 
@@ -213,8 +201,7 @@ const reasignar = async (req, res) => {
       await tx.rol_guardia_movil.update({ where: { id: nuevoMovil }, data: { estado: 'OCUPADO' } });
       await tx.historial_solicitud.create({
         data: {
-          solicitud_id: d.solicitud_id,
-          estado_anterior_id: d.solicitud.estado_solicitud_id,
+          solicitud_id: d.solicitud_id, estado_anterior_id: d.solicitud.estado_solicitud_id,
           estado_nuevo_id: d.solicitud.estado_solicitud_id,
           usuario_id: req.usuario.id, observacion: observacion || 'Reasignación de móvil',
         },
@@ -228,32 +215,70 @@ const reasignar = async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error al reasignar el móvil' }); }
 };
 
-// Avanzar el estado del despacho (DESPACHADO→EN_ESCENA→TRASLADANDO→FINALIZADO/CANCELADO)
+// Avanzar el estado del despacho (usa la máquina de estados compartida).
 const cambiarEstado = async (req, res) => {
-  const { id } = req.params;
-  const { estado_despacho_id, condicion_cierre_id } = req.body;
-  try {
-    const did = int(id), nuevo = int(estado_despacho_id);
-    const d = await prisma.despacho.findUnique({ where: { id: did } });
-    if (!d) return res.status(404).json({ error: 'Despacho no encontrado' });
-    if (!MAP_SOL[nuevo]) return res.status(400).json({ error: 'Estado inválido' });
-
-    const cerrado = nuevo === 4 || nuevo === 5;
-    const result = await prisma.$transaction(async (tx) => {
-      const dataD = { estado_despacho_id: nuevo };
-      if (nuevo === 2) dataD.hora_en_escena = new Date();
-      if (cerrado) { dataD.hora_fin = new Date(); if (condicion_cierre_id) dataD.condicion_cierre_id = int(condicion_cierre_id); }
-      const upd = await tx.despacho.update({ where: { id: did }, data: dataD });
-      const sol = await tx.solicitud.findUnique({ where: { id: d.solicitud_id } });
-      await tx.solicitud.update({ where: { id: d.solicitud_id }, data: { estado_solicitud_id: MAP_SOL[nuevo] } });
-      await tx.historial_solicitud.create({ data: { solicitud_id: d.solicitud_id, estado_anterior_id: sol.estado_solicitud_id, estado_nuevo_id: MAP_SOL[nuevo], usuario_id: req.usuario.id, observacion: 'Despacho estado ' + nuevo } });
-      if (cerrado) await tx.rol_guardia_movil.update({ where: { id: d.rol_guardia_movil_id }, data: { estado: 'DISPONIBLE' } });
-      return upd;
-    });
-    socket.cambioEstadoSolicitud({ id: d.solicitud_id, estado_solicitud_id: MAP_SOL[nuevo] });
-    if (cerrado) socket.cambioEstadoVehiculo({ rol_guardia_movil_id: d.rol_guardia_movil_id, estado: 'DISPONIBLE' });
-    res.json(result);
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Error al cambiar el estado' }); }
+  const { estado_despacho_id, condicion_cierre_id, km_inicio, km_fin, motivo } = req.body;
+  const r = await avanzarEstado({
+    despachoId: int(req.params.id), nuevo: int(estado_despacho_id), usuarioId: req.usuario.id,
+    condicion_cierre_id, km_inicio, km_fin, motivo,
+  });
+  if (!r.ok) return res.status(r.status || 500).json({ error: r.error });
+  res.json(r.despacho);
 };
 
-module.exports = { getCatalogos, getTablero, getHistorial, setUbicacion, asignar, reasignar, cambiarEstado };
+// Cancelar la ASIGNACIÓN (≠ cancelar servicio): la solicitud vuelve a PENDIENTE para re-despachar
+// y el móvil queda libre. Solo antes de llegar al lugar (estados 1/6/7).
+const cancelarAsignacion = async (req, res) => {
+  const { id } = req.params;
+  const { motivo } = req.body;
+  try {
+    const did = int(id);
+    const d = await prisma.despacho.findUnique({ where: { id: did } });
+    if (!d) return res.status(404).json({ error: 'Despacho no encontrado' });
+    if (!PRE_ESCENA.includes(d.estado_despacho_id)) {
+      return res.status(409).json({ error: 'El móvil ya está en el lugar: usá cancelar servicio, no cancelar asignación' });
+    }
+    if (!motivo || !motivo.trim()) return res.status(400).json({ error: 'Indicá el motivo de la cancelación de asignación' });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const sol = await tx.solicitud.findUnique({ where: { id: d.solicitud_id } });
+      const upd = await tx.despacho.update({
+        where: { id: did },
+        data: { estado_despacho_id: 5, cancelacion_tipo: 'ASIGNACION', motivo_cambio: motivo.trim(), hora_fin: new Date() },
+      });
+      await tx.solicitud.update({ where: { id: d.solicitud_id }, data: { estado_solicitud_id: 1 } }); // vuelve a PENDIENTE
+      await tx.rol_guardia_movil.update({ where: { id: d.rol_guardia_movil_id }, data: { estado: 'DISPONIBLE' } });
+      await tx.historial_solicitud.create({ data: { solicitud_id: d.solicitud_id, estado_anterior_id: sol.estado_solicitud_id, estado_nuevo_id: 1, usuario_id: req.usuario.id, observacion: 'Cancelación de asignación: ' + motivo.trim() } });
+      return upd;
+    });
+    socket.cambioEstadoSolicitud({ id: d.solicitud_id, estado_solicitud_id: 1 });
+    socket.cambioEstadoVehiculo({ rol_guardia_movil_id: d.rol_guardia_movil_id, estado: 'DISPONIBLE' });
+    res.json(result);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Error al cancelar la asignación' }); }
+};
+
+// Cambiar la prioridad del servicio (solo antes de llegar al lugar), con motivo.
+const cambiarPrioridad = async (req, res) => {
+  const { id } = req.params;
+  const { prioridad, motivo } = req.body;
+  try {
+    const did = int(id);
+    const d = await prisma.despacho.findUnique({ where: { id: did } });
+    if (!d) return res.status(404).json({ error: 'Despacho no encontrado' });
+    if (!PRE_ESCENA.includes(d.estado_despacho_id)) {
+      return res.status(409).json({ error: 'Ya no se puede cambiar la prioridad (el móvil está en el lugar o el servicio cerró)' });
+    }
+    if (!prioridad) return res.status(400).json({ error: 'Elegí la prioridad' });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const upd = await tx.despacho.update({ where: { id: did }, data: { prioridad, motivo_cambio: motivo || null } });
+      await tx.solicitud.update({ where: { id: d.solicitud_id }, data: { prioridad } });
+      await tx.historial_solicitud.create({ data: { solicitud_id: d.solicitud_id, estado_anterior_id: null, estado_nuevo_id: null, usuario_id: req.usuario.id, observacion: `Cambio de prioridad a ${prioridad}${motivo ? ': ' + motivo : ''}` } });
+      return upd;
+    });
+    socket.cambioEstadoSolicitud({ id: d.solicitud_id });
+    res.json(result);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Error al cambiar la prioridad' }); }
+};
+
+module.exports = { getCatalogos, getTablero, getHistorial, setUbicacion, asignar, reasignar, cambiarEstado, cancelarAsignacion, cambiarPrioridad };

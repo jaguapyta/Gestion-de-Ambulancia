@@ -11,6 +11,9 @@ const EST: Record<number, { l: string; c: string; bg: string }> = {
   3: { l: 'Trasladando', c: '#7c3aed', bg: '#f5f3ff' },
   4: { l: 'Finalizado', c: '#15803d', bg: '#f0fdf4' },
   5: { l: 'Cancelado', c: '#dc2626', bg: '#fef2f2' },
+  6: { l: 'Recibido', c: '#1d4ed8', bg: '#eff6ff' },
+  7: { l: 'En camino', c: '#1d4ed8', bg: '#eff6ff' },
+  8: { l: 'En destino', c: '#7c3aed', bg: '#f5f3ff' },
 };
 const fmt = (iso: string) => iso ? new Date(iso).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
@@ -23,6 +26,10 @@ export default function ServiciosPage() {
   const [msg, setMsg] = useState('');
   const [fichas, setFichas] = useState<any[]>([]);
   const [fichaId, setFichaId] = useState<number | null>(null);
+  const [km, setKm] = useState('');
+  const [cond, setCond] = useState('');
+  const [condiciones, setCondiciones] = useState<any[]>([]);
+  const [avisoKm, setAvisoKm] = useState(false);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -36,6 +43,8 @@ export default function ServiciosPage() {
   useEffect(() => {
     try { setRol(JSON.parse(localStorage.getItem('usuario') ?? '{}').rol ?? ''); } catch { }
     cargar();
+    fetch(`${API_URL}/api/servicios/catalogos`, { headers: headers() })
+      .then(r => r.json()).then(d => { if (d?.condiciones_cierre) setCondiciones(d.condiciones_cierre); }).catch(() => { });
     const open = new URLSearchParams(window.location.search).get('open');
     if (open) abrir(Number(open));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,13 +58,20 @@ export default function ServiciosPage() {
 
   const abrir = async (id: number) => {
     const r = await fetch(`${API_URL}/api/servicios/${id}`, { headers: headers() });
-    if (r.ok) { const s = await r.json(); setSel(s); cargarFichas(s.solicitud?.id); } else setMsg('No se pudo abrir el servicio');
+    if (!r.ok) { setMsg('No se pudo abrir el servicio'); return; }
+    let s = await r.json();
+    // Al abrir, si está DESPACHADO (1) pasa automáticamente a RECIBIDO (6)
+    if (s.estado_despacho_id === 1) {
+      const rr = await fetch(`${API_URL}/api/servicios/${id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: 6 }) });
+      if (rr.ok) { const r2 = await fetch(`${API_URL}/api/servicios/${id}`, { headers: headers() }); if (r2.ok) s = await r2.json(); cargar(); }
+    }
+    setKm(''); setCond(''); setSel(s); cargarFichas(s.solicitud?.id);
   };
-  const avanzar = async (nuevo: number) => {
+  const avanzar = async (nuevo: number, extra: any = {}) => {
     if (!sel) return;
-    const r = await fetch(`${API_URL}/api/servicios/${sel.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: nuevo }) });
+    const r = await fetch(`${API_URL}/api/servicios/${sel.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: nuevo, ...extra }) });
     const d = await r.json();
-    if (r.ok) { await abrir(sel.id); cargar(); } else setMsg(d.error || 'No se pudo cambiar el estado');
+    if (r.ok) { setKm(''); setCond(''); await abrir(sel.id); cargar(); } else setMsg(d.error || 'No se pudo cambiar el estado');
   };
   const nuevaFicha = async () => {
     if (!sel) return;
@@ -64,7 +80,7 @@ export default function ServiciosPage() {
     if (r.ok) { setFichaId(d.id); } else setMsg(d.error || 'No se pudo crear la ficha');
   };
 
-  const activos = items.filter(x => x.estado_despacho_id <= 3);
+  const activos = items.filter(x => ![4, 5].includes(x.estado_despacho_id));
   const historial = items;
   const lista = tab === 'asignados' ? activos : historial;
 
@@ -152,11 +168,26 @@ export default function ServiciosPage() {
                 {sel.editable ? (
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px' }}>Cambiar estado</div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {sel.estado_despacho_id === 1 && <button onClick={() => avanzar(2)} style={btn}>Llegué (en el lugar)</button>}
-                      {sel.estado_despacho_id === 2 && <button onClick={() => avanzar(3)} style={btn}>Trasladando</button>}
-                      {sel.estado_despacho_id === 3 && <button onClick={() => avanzar(4)} style={{ ...btn, background: '#15803d', color: 'white', border: 'none' }}>Finalizar</button>}
-                      {sel.estado_despacho_id <= 3 && <button onClick={() => avanzar(5)} style={{ ...btn, color: '#b91c1c' }}>Cancelar</button>}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {sel.estado_despacho_id === 1 && <button onClick={() => avanzar(6)} style={btn}>Recibido</button>}
+                      {sel.estado_despacho_id === 6 && <>
+                        <input value={km} onChange={e => { setKm(e.target.value.replace(/\D/g, '')); setAvisoKm(false); }} placeholder="Km de inicio" style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: avisoKm ? '1px solid #dc2626' : '0.5px solid #e5e7eb', width: '110px' }} />
+                        <button onClick={() => km ? avanzar(7, { km_inicio: km }) : setAvisoKm(true)} style={btn}>En camino</button>
+                        {avisoKm && <span style={{ color: '#dc2626', fontSize: '11px', width: '100%' }}>Cargá el km de inicio del móvil para marcar "En camino".</span>}
+                      </>}
+                      {sel.estado_despacho_id === 7 && <button onClick={() => avanzar(2)} style={btn}>Llegué (en el lugar)</button>}
+                      {sel.estado_despacho_id === 2 && <>
+                        <button onClick={() => avanzar(3)} style={btn}>Paciente a bordo</button>
+                        <select value={cond} onChange={e => setCond(e.target.value)} style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: '0.5px solid #e5e7eb' }}><option value="">Condición…</option>{condiciones.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select>
+                        <button onClick={() => cond ? avanzar(4, { condicion_cierre_id: cond }) : setMsg('Elegí la condición')} style={btn}>Asistido en el lugar</button>
+                        <button onClick={() => cond ? avanzar(5, { condicion_cierre_id: cond }) : setMsg('Elegí la condición')} style={{ ...btn, color: '#b91c1c' }}>Cancelar servicio</button>
+                      </>}
+                      {sel.estado_despacho_id === 3 && <button onClick={() => avanzar(8)} style={btn}>En destino</button>}
+                      {sel.estado_despacho_id === 8 && <>
+                        <input value={km} onChange={e => setKm(e.target.value.replace(/\D/g, ''))} placeholder="Km final" style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: '0.5px solid #e5e7eb', width: '100px' }} />
+                        <select value={cond} onChange={e => setCond(e.target.value)} style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: '0.5px solid #e5e7eb' }}><option value="">Condición…</option>{condiciones.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select>
+                        <button onClick={() => cond ? avanzar(4, { condicion_cierre_id: cond, km_fin: km || undefined }) : setMsg('Elegí la condición')} style={{ ...btn, background: '#15803d', color: 'white', border: 'none' }}>Disponible</button>
+                      </>}
                     </div>
                   </div>
                 ) : <p style={{ fontSize: '12px', color: '#c2410c' }}>Pasaron 24 h de la asignación: el servicio quedó en solo lectura.</p>}

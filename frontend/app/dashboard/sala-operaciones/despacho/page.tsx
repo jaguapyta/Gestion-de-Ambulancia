@@ -10,14 +10,14 @@ const DESP = ['ADMINISTRADOR', 'COORDINADOR_OPERATIVO', 'COORDINADOR_TRANSPORTE'
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
 const estadoMovilColor = (e: string) => e === 'DISPONIBLE' ? '#639922' : e === 'OCUPADO' ? '#BA7517' : '#888780';
 const PRIO_HEX: Record<string, string> = { ROJO: '#E24B4A', AMARILLO: '#EF9F27', VERDE: '#1D9E75', AZUL: '#378ADD' };
-const estLabel = (n: string): string => ({ PENDIENTE: 'Pendiente', EN_PROCESO: 'En proceso', DESPACHADA: 'Asignado', EN_CAMINO: 'En camino', EN_ESCENA: 'En el lugar', EN_TRASLADO: 'Trasladando', FINALIZADA: 'Finalizada' } as Record<string, string>)[n] ?? n;
+const estLabel = (n: string): string => ({ PENDIENTE: 'Pendiente', EN_PROCESO: 'En proceso', DESPACHADA: 'Asignado', RECIBIDO: 'Recibido', EN_CAMINO: 'En camino', EN_ESCENA: 'En el lugar', EN_TRASLADO: 'Trasladando', EN_DESTINO: 'En destino', FINALIZADA: 'Finalizada' } as Record<string, string>)[n] ?? n;
 const estChip = (n: string) => n === 'PENDIENTE' ? { bg: '#fff7ed', tx: '#c2410c' } : { bg: '#eff6ff', tx: '#1d4ed8' };
 
 // Regla de reasignación: emergencia solo antes de "en el lugar" (estado_despacho 1);
 // traslado/cama mientras el servicio no esté cerrado (no 4/5).
 const puedeReasignar = (s: any): boolean => {
   const d = s.despacho?.[0]; if (!d) return false;
-  if (s.tipo_solicitud_id === 1) return d.estado_despacho_id === 1;
+  if (s.tipo_solicitud_id === 1) return [1, 6, 7].includes(d.estado_despacho_id);
   return ![4, 5].includes(d.estado_despacho_id);
 };
 const movilAsignado = (s: any): string | null => s.despacho?.[0]?.rol_guardia_movil?.movil?.cod_movil ?? null;
@@ -36,6 +36,9 @@ export default function DespachoPage() {
   const [sel, setSel] = useState<any>(null);
   const [cerrando, setCerrando] = useState<any>(null);
   const [cond, setCond] = useState('');
+  const [km, setKm] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [prio, setPrio] = useState('');
   const [msg, setMsg] = useState('');
   const [detalle, setDetalle] = useState<any>(null);
   const [verHist, setVerHist] = useState(false);
@@ -146,11 +149,25 @@ export default function DespachoPage() {
     else setMsg('No se pudo asignar');
   };
 
-  const avanzar = async (despachoId: number, estado: number, condicion?: string) => {
-    const res = await fetch(`${API_URL}/api/despacho/${despachoId}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: estado, condicion_cierre_id: condicion || undefined }) });
-    if (res.ok) { setCerrando(null); setCond(''); cargar(); }
+  const avanzar = async (despachoId: number, estado: number, extra: any = {}) => {
+    const res = await fetch(`${API_URL}/api/despacho/${despachoId}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: estado, ...extra }) });
+    if (res.ok) { setCerrando(null); setCond(''); setKm(''); setMotivo(''); cargar(); }
+    else { const e = await res.json().catch(() => ({})); setMsg(e.error || 'No se pudo cambiar el estado'); }
   };
 
+  const cancelarAsignacion = async (despachoId: number) => {
+    if (!motivo.trim()) { setMsg('Indicá el motivo'); return; }
+    const res = await fetch(`${API_URL}/api/despacho/${despachoId}/cancelar-asignacion`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ motivo: motivo.trim() }) });
+    if (res.ok) { setCerrando(null); setMotivo(''); setMsg('Asignación cancelada — el servicio volvió a pendiente'); cargar(); }
+    else { const e = await res.json().catch(() => ({})); setMsg(e.error || 'No se pudo cancelar la asignación'); }
+  };
+
+  const cambiarPrioridad = async (despachoId: number) => {
+    if (!prio) { setMsg('Elegí la prioridad'); return; }
+    const res = await fetch(`${API_URL}/api/despacho/${despachoId}/prioridad`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ prioridad: prio, motivo: motivo.trim() || undefined }) });
+    if (res.ok) { setCerrando(null); setPrio(''); setMotivo(''); cargar(); }
+    else { const e = await res.json().catch(() => ({})); setMsg(e.error || 'No se pudo cambiar la prioridad'); }
+  };
   const abrirHistorial = async () => {
     const r = await fetch(`${API_URL}/api/despacho/historial`, { headers: headers() });
     if (r.ok) { setHist(await r.json()); setVerHist(true); }
@@ -163,29 +180,67 @@ export default function DespachoPage() {
     ? `${s.solicitud_ref_cama?.centro_solicitante ?? '—'} → ${s.regulacion_cama?.hospital_destino ?? '—'}`
     : `${s.solicitud_traslado?.origen ?? '—'} → ${s.solicitud_traslado?.destino ?? '—'}`;
 
-  // Controles de avance de estado del servicio en curso (usados en tarjetas y filas).
+  // Controles de avance de estado del servicio en curso (según el estado del despacho).
   const controlesEstado = (d: any) => {
     if (!d) return null;
-    if (cerrando?.despachoId === d.id) {
+    const est = d.estado_despacho_id;
+    const abierto = cerrando?.despachoId === d.id ? cerrando.tipo : null;
+    const btn = { fontSize: '10px', padding: '3px 7px', borderRadius: '5px', cursor: 'pointer', border: '0.5px solid #e5e7eb', background: '#fff' } as const;
+    const stop = (e: any) => e.stopPropagation();
+    const open = (tipo: string, estado?: number) => { setCerrando({ despachoId: d.id, tipo, estado }); setCond(''); setKm(''); setMotivo(''); setPrio(''); };
+
+    if (abierto === 'km_camino') return (
+      <div style={{ marginTop: '4px', display: 'flex', gap: '4px' }} onClick={stop}>
+        <input value={km} onChange={e => setKm(e.target.value.replace(/\D/g, ''))} placeholder="Km de inicio" style={{ flex: 1, fontSize: '11px', padding: '3px 6px' }} />
+        <button onClick={() => km && avanzar(d.id, 7, { km_inicio: km })} style={btn}>En camino ✓</button>
+        <button onClick={() => setCerrando(null)} style={btn}>✕</button>
+      </div>
+    );
+    if (abierto === 'cerrar') {
+      const finaliza = cerrando.estado === 4;
       return (
-        <div style={{ marginTop: '4px', display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
-          <select value={cond} onChange={e => setCond(e.target.value)} style={{ flex: 1, fontSize: '11px', padding: '3px' }}>
-            <option value="">Motivo…</option>{cat.condiciones_cierre.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        <div style={{ marginTop: '4px', display: 'flex', gap: '4px', flexWrap: 'wrap' }} onClick={stop}>
+          <select value={cond} onChange={e => setCond(e.target.value)} style={{ flex: 1, minWidth: '120px', fontSize: '11px', padding: '3px' }}>
+            <option value="">Condición…</option>{cat.condiciones_cierre.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
-          <button onClick={() => cond && avanzar(d.id, cerrando.estado, cond)} style={{ fontSize: '11px', padding: '3px 7px' }}>OK</button>
+          {finaliza && <input value={km} onChange={e => setKm(e.target.value.replace(/\D/g, ''))} placeholder="Km final" style={{ width: '80px', fontSize: '11px', padding: '3px 6px' }} />}
+          <button onClick={() => cond && avanzar(d.id, cerrando.estado, { condicion_cierre_id: cond, ...(finaliza && km ? { km_fin: km } : {}) })} style={btn}>OK</button>
+          <button onClick={() => setCerrando(null)} style={btn}>✕</button>
         </div>
       );
     }
+    if (abierto === 'cancelAsig') return (
+      <div style={{ marginTop: '4px', display: 'flex', gap: '4px' }} onClick={stop}>
+        <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Motivo" style={{ flex: 1, fontSize: '11px', padding: '3px 6px' }} />
+        <button onClick={() => cancelarAsignacion(d.id)} style={btn}>Cancelar asig. ✓</button>
+        <button onClick={() => setCerrando(null)} style={btn}>✕</button>
+      </div>
+    );
+    if (abierto === 'prioridad') return (
+      <div style={{ marginTop: '4px', display: 'flex', gap: '4px', flexWrap: 'wrap' }} onClick={stop}>
+        <select value={prio} onChange={e => setPrio(e.target.value)} style={{ fontSize: '11px', padding: '3px' }}>
+          <option value="">Prioridad…</option>{['ROJO', 'AMARILLO', 'VERDE', 'AZUL'].map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Motivo" style={{ flex: 1, minWidth: '90px', fontSize: '11px', padding: '3px 6px' }} />
+        <button onClick={() => cambiarPrioridad(d.id)} style={btn}>OK</button>
+        <button onClick={() => setCerrando(null)} style={btn}>✕</button>
+      </div>
+    );
+
+    const pre = [1, 6, 7].includes(est);
     return (
-      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
-        {d.estado_despacho_id === 1 && <button onClick={() => avanzar(d.id, 2)} style={{ fontSize: '10px', padding: '3px 7px' }}>En escena</button>}
-        {d.estado_despacho_id === 2 && <button onClick={() => avanzar(d.id, 3)} style={{ fontSize: '10px', padding: '3px 7px' }}>Trasladando</button>}
-        {d.estado_despacho_id === 3 && <button onClick={() => setCerrando({ despachoId: d.id, estado: 4 })} style={{ fontSize: '10px', padding: '3px 7px', background: '#15803d', color: '#fff', border: 'none', borderRadius: '5px' }}>Finalizar</button>}
-        <button onClick={() => setCerrando({ despachoId: d.id, estado: 5 })} style={{ fontSize: '10px', padding: '3px 7px', color: '#b91c1c' }}>Cancelar</button>
+      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }} onClick={stop}>        {est === 6 && <button onClick={() => open('km_camino')} style={btn}>En camino</button>}
+        {est === 7 && <button onClick={() => avanzar(d.id, 2)} style={btn}>En el lugar</button>}
+        {est === 2 && <>
+          <button onClick={() => avanzar(d.id, 3)} style={btn}>Paciente a bordo</button>
+          <button onClick={() => open('cerrar', 4)} style={btn}>Asistido en el lugar</button>
+        </>}
+        {est === 3 && <button onClick={() => avanzar(d.id, 8)} style={btn}>En destino</button>}
+        {est === 8 && <button onClick={() => open('cerrar', 4)} style={{ ...btn, background: '#15803d', color: '#fff', border: 'none' }}>Disponible</button>}        {pre && <button onClick={() => open('cancelAsig')} style={{ ...btn, color: '#6b7280' }}>Cancelar asig.</button>}
+        {est === 2 && <button onClick={() => open('cerrar', 5)} style={{ ...btn, color: '#b91c1c' }}>Cancelar servicio</button>}
       </div>
     );
   };
-
   const disponibles = tab.moviles.filter((m: any) => m.estado === 'DISPONIBLE');
 
   return (
