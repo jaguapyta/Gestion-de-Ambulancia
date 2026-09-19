@@ -198,13 +198,14 @@ export default function DespachoPage() {
     );
     if (abierto === 'cerrar') {
       const finaliza = cerrando.estado === 4;
+      const sinCond = finaliza && est === 8; // finalizar tras traslado (EN DESTINO): no pide condición
       return (
         <div style={{ marginTop: '4px', display: 'flex', gap: '4px', flexWrap: 'wrap' }} onClick={stop}>
-          <select value={cond} onChange={e => setCond(e.target.value)} style={{ flex: 1, minWidth: '120px', fontSize: '11px', padding: '3px' }}>
+          {!sinCond && <select value={cond} onChange={e => setCond(e.target.value)} style={{ flex: 1, minWidth: '120px', fontSize: '11px', padding: '3px' }}>
             <option value="">Condición…</option>{cat.condiciones_cierre.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
+          </select>}
           {finaliza && <input value={km} onChange={e => setKm(e.target.value.replace(/\D/g, ''))} placeholder="Km final" style={{ width: '80px', fontSize: '11px', padding: '3px 6px' }} />}
-          <button onClick={() => cond && avanzar(d.id, cerrando.estado, { condicion_cierre_id: cond, ...(finaliza && km ? { km_fin: km } : {}) })} style={btn}>OK</button>
+          <button onClick={() => (sinCond || cond) && avanzar(d.id, cerrando.estado, { ...(sinCond ? {} : { condicion_cierre_id: cond }), ...(finaliza && km ? { km_fin: km } : {}) })} style={btn}>OK</button>
           <button onClick={() => setCerrando(null)} style={btn}>✕</button>
         </div>
       );

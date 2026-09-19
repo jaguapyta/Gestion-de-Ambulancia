@@ -184,9 +184,9 @@ export default function ServiciosPage() {
                       </>}
                       {sel.estado_despacho_id === 3 && <button onClick={() => avanzar(8)} style={btn}>En destino</button>}
                       {sel.estado_despacho_id === 8 && <>
-                        <input value={km} onChange={e => setKm(e.target.value.replace(/\D/g, ''))} placeholder="Km final" style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: '0.5px solid #e5e7eb', width: '100px' }} />
-                        <select value={cond} onChange={e => setCond(e.target.value)} style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: '0.5px solid #e5e7eb' }}><option value="">Condición…</option>{condiciones.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select>
-                        <button onClick={() => cond ? avanzar(4, { condicion_cierre_id: cond, km_fin: km || undefined }) : setMsg('Elegí la condición')} style={{ ...btn, background: '#15803d', color: 'white', border: 'none' }}>Disponible</button>
+                        <input value={km} onChange={e => { setKm(e.target.value.replace(/\D/g, '')); setAvisoKm(false); }} placeholder="Km final" style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: avisoKm ? '1px solid #dc2626' : '0.5px solid #e5e7eb', width: '100px' }} />
+                        <button onClick={() => !km ? setAvisoKm(true) : avanzar(4, { km_fin: km })} style={{ ...btn, background: '#15803d', color: 'white', border: 'none' }}>Disponible</button>
+                        {avisoKm && <span style={{ color: '#dc2626', fontSize: '11px', width: '100%' }}>Cargá el km final del móvil.</span>}
                       </>}
                     </div>
                   </div>

@@ -26,7 +26,10 @@ async function avanzarEstado({ despachoId, nuevo, usuarioId, condicion_cierre_id
     return { ok: false, status: 409, error: `No se puede pasar de ${NOMBRE_DESP[d.estado_despacho_id]} a ${NOMBRE_DESP[nuevo]}` };
   }
   if (nuevo === 7 && num(km_inicio) === null) return { ok: false, status: 400, error: 'Ingresá el km de inicio del móvil' };
-  if (FINALES.includes(nuevo) && !condicion_cierre_id) return { ok: false, status: 400, error: 'Indicá la condición de cierre' };
+  // La condición de cierre se exige solo al cerrar EN ESCENA (asistido en el lugar) o al cancelar;
+  // NO al finalizar tras un traslado (EN DESTINO -> FINALIZADO), donde no aplica.
+  const requiereCondicion = nuevo === 5 || (nuevo === 4 && d.estado_despacho_id === 2);
+  if (requiereCondicion && !condicion_cierre_id) return { ok: false, status: 400, error: 'Indicá la condición de cierre' };
 
   const cerrado = FINALES.includes(nuevo);
   const upd = await prisma.$transaction(async (tx) => {
