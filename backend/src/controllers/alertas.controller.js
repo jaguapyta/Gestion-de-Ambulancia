@@ -10,6 +10,7 @@ const VE = {
   traslados:      ['ADMINISTRADOR', 'COORDINADOR_REGULACION'],
   excepciones:    ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA'],
   camas:          ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA', 'MEDICO_REGULADOR'],
+  movilDemorado:  ['ADMINISTRADOR', 'COORDINADOR_OPERATIVO', 'COORDINADOR_TRANSPORTE', 'SUPERVISOR_GUARDIA'],
 };
 
 const getAlertas = async (req, res) => {
@@ -21,6 +22,7 @@ const getAlertas = async (req, res) => {
     const diasHab = cfg?.alerta_habilitacion_dias ?? 30;
     const hsExc   = cfg?.alerta_excepcion_horas ?? 24;
     const hsCama  = cfg?.alerta_cama_horas ?? 6;
+    const minDem  = cfg?.movil_demorado_min ?? 30;
 
     const ahora = new Date();
     const alertas = [];
@@ -83,6 +85,18 @@ const getAlertas = async (req, res) => {
       });
       const n = abiertas.filter(s => (s.regulacion_llamada[0]?.created_at ?? s.created_at) <= limite).length;
       if (n > 0) alertas.push({ clave: 'camas', icono: '🛏️', titulo: `${n} pedido(s) de cama sin evolucionar (+${hsCama} h)`, cantidad: n, link: '/dashboard/sala-operaciones/regulacion' });
+    }
+
+    // #7 Móviles demorados (mucho tiempo en un estado sin avanzar)
+    if (ve('movilDemorado')) {
+      const limite = new Date(ahora.getTime() - minDem * 60000);
+      const activos = await prisma.despacho.findMany({
+        where: { estado_despacho_id: { in: [1, 6, 7, 2, 3, 8] } },
+        select: { estado_despacho_id: true, hora_despacho: true, hora_recibido: true, hora_en_camino: true, hora_en_escena: true, hora_en_destino: true },
+      });
+      const entrada = (d) => ({ 6: d.hora_recibido, 7: d.hora_en_camino, 2: d.hora_en_escena, 3: d.hora_en_escena, 8: d.hora_en_destino }[d.estado_despacho_id]) || d.hora_despacho;
+      const n = activos.filter(d => { const t = entrada(d); return t && new Date(t) <= limite; }).length;
+      if (n > 0) alertas.push({ clave: 'movilDemorado', icono: '⏱️', titulo: `${n} móvil(es) demorado(s) (+${minDem} min en un estado)`, cantidad: n, link: '/dashboard/coordinacion-operativa/tablero' });
     }
 
     const total = alertas.reduce((a, x) => a + x.cantidad, 0);
