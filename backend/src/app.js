@@ -45,6 +45,7 @@ app.use('/api/regulacion/camas', require('./routes/regulacion.routes'));
 app.use('/api/emergencias', require('./routes/emergencias.routes'));
 app.use('/api/servicios', require('./routes/servicios.routes'));
 app.use('/api/fichas', require('./routes/ficha.routes'));
+app.use('/api/estadisticas', require('./routes/estadisticas.routes'));
 app.use('/api/auditoria', require('./routes/auditoria.routes'));
 app.use('/api/excepciones-acceso', require('./routes/excepciones-acceso.routes'));
 app.use('/api/alertas', require('./routes/alertas.routes'));

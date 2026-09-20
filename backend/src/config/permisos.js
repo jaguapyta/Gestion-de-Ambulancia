@@ -17,6 +17,8 @@ const SUPERVISOR = 'SUPERVISOR_GUARDIA';
 const ASISTENTE_TRANSPORTE = 'ASISTENTE_TRANSPORTE';
 const ARM = 'ARM';
 const MEDICO_REGULADOR = 'MEDICO_REGULADOR';
+const COORD_ESTADISTICAS = 'COORDINADOR_ESTADISTICAS';
+const ASISTENTE_ESTADISTICAS = 'ASISTENTE_ESTADISTICAS';
 
 // Potestad: qué rol puede administrar el legajo de qué tipo de funcionario.
 // Cada área gestiona su propio personal; dentro del Centro de Regulación
@@ -38,6 +40,9 @@ const tienePotestad = (rolObjetivo, rolSolicitante) =>
 module.exports = {
   // Administración: exclusivo del Administrador
   ADMINISTRACION: [ADMIN],
+
+  // Estadísticas: jefaturas operativas + el área de Estadísticas
+  LEER_ESTADISTICAS: [ADMIN, COORD_OPERATIVO, COORD_TRANSPORTE, COORD_REGULACION, COORD_ESTADISTICAS, ASISTENTE_ESTADISTICAS],
 
   // Móviles: los usan Administración, Transporte y el armado de guardias
   LEER_MOVILES: [ADMIN, COORD_TRANSPORTE, ASISTENTE_TRANSPORTE, COORD_OPERATIVO],
