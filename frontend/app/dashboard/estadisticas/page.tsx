@@ -110,7 +110,7 @@ export default function EstadisticasPage() {
             <input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={inp} />
             <span style={{ color: '#9ca3af' }}>—</span>
             <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={inp} />
-            <button onClick={cargar} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>Aplicar</button>
+            <button onClick={() => cargar()} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>Aplicar</button>
             <button onClick={() => setOpcionesAbierto(v => !v)} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '9px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>⚙️ Vistas</button>
           </div>
         </div>
