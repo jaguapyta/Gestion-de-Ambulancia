@@ -10,6 +10,7 @@ const subMenu = [
   { href: '/dashboard/administracion/bases', label: 'Bases', icon: '🏥' },
   { href: '/dashboard/administracion/roles', label: 'Roles', icon: '🔐' },
   { href: '/dashboard/administracion/configuracion', label: 'Configuración', icon: '⚙️' },
+  { href: '/dashboard/administracion/plantillas', label: 'Documentos', icon: '📄' },  
   { href: '/dashboard/administracion/auditoria', label: 'Auditoría', icon: '🕵️' },
 ];
 

@@ -627,6 +627,7 @@ model movil {
   rasp                     String?                    @db.VarChar(20)
   funcion                  String?                    @db.VarChar(255)
   consumo_l100km           Decimal?                   @db.Decimal(5, 2)
+  tipo_combustible String @default("GASOIL") @db.VarChar(10)   // GASOIL | NAFTA  
   nro_tarjeta_combustible  String?                    @db.VarChar(30)
   km_inicio                Int?
   ultimo_km                Int?
@@ -857,6 +858,7 @@ model configuracion {
  incidente_parecido_horas    Int?      @default(2)    // dedup: buscar incidentes abiertos de las últimas N horas
   movil_demorado_min          Int?      @default(30)   // alerta: móvil demasiado tiempo en un estado sin avanzar  
   updated_at                  DateTime? @default(now()) @db.DateTime(0)
+  jefe_transporte String? @default("Jefe de Transporte") @db.VarChar(100)  
 }
 
 model horario_guardia {
@@ -948,7 +950,7 @@ model orden_trabajo_transporte {
   movil         movil     @relation(fields: [movil_id], references: [id], onUpdate: Restrict, map: "orden_trabajo_transporte_ibfk_1")
   conductor     usuario   @relation("orden_conductor", fields: [conductor_id], references: [id], onUpdate: Restrict, map: "orden_trabajo_transporte_ibfk_2")
   creador       usuario   @relation("orden_creador", fields: [creado_por], references: [id], onUpdate: Restrict, map: "orden_trabajo_transporte_ibfk_3")
-
+  recibo_combustible recibo_combustible[]
   @@index([conductor_id], map: "conductor_id")
   @@index([creado_por], map: "creado_por")
   @@index([movil_id], map: "movil_id")
@@ -1363,4 +1365,30 @@ model llamada {
   @@index([solicitud_id], map: "idx_llamada_solicitud")
   @@index([canal_ingreso_id], map: "fk_llamada_canal")
   @@index([recepcionista_id], map: "fk_llamada_recepcionista")
+}
+model recibo_combustible {
+  id                   Int      @id @default(autoincrement())
+  nro_recibo           String   @db.VarChar(20)
+  fecha                DateTime @db.Date
+  orden_trabajo_id     Int
+  litros               Decimal  @db.Decimal(7,2)
+  monto_gs             Int?
+  nro_tickets          String?  @db.VarChar(20)
+  codigo_autorizacion  String?  @db.VarChar(30)
+  nro_tarjeta          String?  @db.VarChar(30)   // snapshot del móvil al momento
+  creado_por           Int
+  created_at           DateTime @default(now()) @db.DateTime(0)
+  orden_trabajo        orden_trabajo_transporte @relation(fields: [orden_trabajo_id], references: [id], onUpdate: Restrict, map: "fk_recibo_orden")
+
+  @@index([orden_trabajo_id], map: "fk_recibo_orden")
+}
+model plantilla_documento {
+  id             Int      @id @default(autoincrement())
+  clave          String   @unique(map: "uk_plantilla_clave") @db.VarChar(30)  // ORDEN | ANEXO_III | RECIBO
+  nombre         String   @db.VarChar(100)
+  contenido_html String   @db.Text
+  orientacion    String   @default("portrait") @db.VarChar(12)                 // portrait | landscape
+  activo         Boolean  @default(true)
+  updated_por    Int?
+  updated_at     DateTime @default(now()) @db.DateTime(0)
 }
