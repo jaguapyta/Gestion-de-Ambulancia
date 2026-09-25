@@ -51,5 +51,6 @@ app.use('/api/excepciones-acceso', require('./routes/excepciones-acceso.routes')
 app.use('/api/alertas', require('./routes/alertas.routes'));
 app.use('/api/recibos', require('./routes/recibos.routes'));
 app.use('/api/plantillas', require('./routes/plantillas.routes'));
+app.use('/api/ubicacion', require('./routes/ubicacion.routes'));
 
 module.exports = app;
