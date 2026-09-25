@@ -41,6 +41,29 @@ const getMisServicios = async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error al obtener servicios' }); }
 };
 
+// Lista de TODOS los servicios abiertos (no finalizados ni cancelados), solo lectura.
+// La usan Dirección (supervisión) y las jefaturas para monitoreo consolidado.
+const getServiciosAbiertos = async (req, res) => {
+  try {
+    const desp = await prisma.despacho.findMany({
+      where: { estado_despacho_id: { notIn: [4, 5] } }, // 4 FINALIZADO, 5 CANCELADO
+      include: {
+        estado_despacho: true,
+        rol_guardia_movil: {
+          include: {
+            movil: true, tipo_soporte: true,
+            tripulacion: { where: { activo: true }, include: { usuario: { include: { persona: true } } } },
+          },
+        },
+        solicitud: { include: solInclude },
+      },
+      orderBy: [{ hora_despacho: 'asc' }],
+      take: 300,
+    });
+    res.json(desp);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Error al obtener servicios abiertos' }); }
+};
+
 const getServicio = async (req, res) => {
   try {
     const id = int(req.params.id);
@@ -82,4 +105,4 @@ const getCatalogos = async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Error al obtener catálogos' }); }
 };
 
-module.exports = { getMisServicios, getServicio, cambiarEstado, getCatalogos };
+module.exports = { getMisServicios, getServiciosAbiertos, getServicio, cambiarEstado, getCatalogos };

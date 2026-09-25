@@ -21,7 +21,8 @@ const fmt = (iso: string) => iso ? new Date(iso).toLocaleString('es-PY', { day: 
 export default function ServiciosPage() {
   const [rol, setRol] = useState('');
   const [items, setItems] = useState<any[]>([]);
-  const [tab, setTab] = useState<'asignados' | 'historial'>('asignados');
+  const [abiertos, setAbiertos] = useState<any[]>([]);
+  const [tab, setTab] = useState<'asignados' | 'historial' | 'abiertos'>('asignados');
   const [sel, setSel] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState('');
@@ -35,14 +36,25 @@ export default function ServiciosPage() {
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
   const esParamedico = rol === 'PARAMEDICO' || rol === 'ADMINISTRADOR';
+  // Dirección + jefaturas ven la pestaña de monitoreo "Servicios abiertos" (solo lectura).
+  const veTodos = ['ADMINISTRADOR', 'DIRECCION', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA', 'COORDINADOR_OPERATIVO', 'COORDINADOR_TRANSPORTE'].includes(rol);
 
   const cargar = () => {
     setCargando(true);
     fetch(`${API_URL}/api/servicios/mios`, { headers: headers() })
       .then(r => r.json()).then(d => { if (Array.isArray(d)) setItems(d); }).catch(() => { }).finally(() => setCargando(false));
   };
+  const cargarAbiertos = () => {
+    fetch(`${API_URL}/api/servicios/abiertos`, { headers: headers() })
+      .then(r => r.json()).then(d => { if (Array.isArray(d)) setAbiertos(d); }).catch(() => { });
+  };
   useEffect(() => {
-    try { setRol(JSON.parse(localStorage.getItem('usuario') ?? '{}').rol ?? ''); } catch { }
+    let r = '';
+    try { r = JSON.parse(localStorage.getItem('usuario') ?? '{}').rol ?? ''; } catch { }
+    setRol(r);
+    // Si el usuario NO es tripulación (p. ej. Dirección), arranca en la pestaña de monitoreo.
+    const soloMonitoreo = ['DIRECCION', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA', 'COORDINADOR_OPERATIVO', 'COORDINADOR_TRANSPORTE'].includes(r);
+    if (soloMonitoreo) { setTab('abiertos'); cargarAbiertos(); }
     cargar();
     fetch(`${API_URL}/api/servicios/catalogos`, { headers: headers() })
       .then(r => r.json()).then(d => { if (d?.condiciones_cierre) setCondiciones(d.condiciones_cierre); }).catch(() => { });
@@ -125,18 +137,49 @@ export default function ServiciosPage() {
   return (
     <ProtectedRoute rolesPermitidos={['ADMINISTRADOR', 'PARAMEDICO', 'CONDUCTOR', 'DIRECCION']}>
       <div>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Mis servicios</h1>
-        <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Servicios asignados a tu tripulación. Editable hasta 24 h de la asignación.</p>
+        <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Servicios</h1>
+        <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+          {tab === 'abiertos' ? 'Monitoreo de todos los servicios abiertos (solo lectura).' : 'Servicios asignados a tu tripulación. Editable hasta 24 h de la asignación.'}
+        </p>
 
         {msg && <div style={{ background: '#fef2f2', color: '#b91c1c', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', margin: '10px 0' }}>{msg}</div>}
 
-        <div style={{ display: 'flex', gap: '8px', margin: '16px 0' }}>
+        <div style={{ display: 'flex', gap: '8px', margin: '16px 0', flexWrap: 'wrap' }}>
+          {veTodos && (
+            <button onClick={() => { setTab('abiertos'); cargarAbiertos(); }} style={{ padding: '7px 16px', borderRadius: '8px', border: tab === 'abiertos' ? '0.5px solid #0a2540' : '0.5px solid #e5e7eb', background: tab === 'abiertos' ? '#0a2540' : 'white', color: tab === 'abiertos' ? 'white' : '#6b7280', cursor: 'pointer', fontSize: '13px' }}>🔵 Servicios abiertos ({abiertos.length})</button>
+          )}
           {(['asignados', 'historial'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 16px', borderRadius: '8px', border: tab === t ? '0.5px solid #0a2540' : '0.5px solid #e5e7eb', background: tab === t ? '#0a2540' : 'white', color: tab === t ? 'white' : '#6b7280', cursor: 'pointer', fontSize: '13px' }}>{t === 'asignados' ? `Asignados (${activos.length})` : `Historial (${historial.length})`}</button>
           ))}
         </div>
 
-        {cargando ? <p style={{ color: '#9ca3af', fontSize: '13px' }}>Cargando…</p> : lista.length === 0 ? <p style={{ color: '#9ca3af', fontSize: '13px' }}>Sin servicios.</p> : (
+        {tab === 'abiertos' ? (
+          abiertos.length === 0 ? <p style={{ color: '#9ca3af', fontSize: '13px' }}>No hay servicios abiertos en este momento.</p> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {abiertos.map(d => {
+                const s = d.solicitud; const e = EST[d.estado_despacho_id] ?? EST[1];
+                const mot = s?.solicitud_emergencia?.motivo_consulta;
+                const trip = (d.rol_guardia_movil?.tripulacion ?? []).map((t: any) => `${t.usuario?.persona?.primer_nombre ?? ''} ${t.usuario?.persona?.primer_apellido ?? ''} (${t.funcion})`.trim()).filter(Boolean).join(' · ');
+                const ruta = s?.solicitud_traslado ? `${s.solicitud_traslado.origen ?? '—'} → ${s.solicitud_traslado.destino ?? '—'}` : '';
+                return (
+                  <div key={d.id} style={{ ...card, display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 500, color: '#0a2540' }}>
+                        Servicio #{s?.id} · 🚑 {d.rol_guardia_movil?.movil?.cod_movil ?? '—'} {mot ? `· ${mot.nombre}` : `· ${s?.tipo_solicitud?.nombre ?? ''}`}
+                        {d.prioridad ? <span style={{ marginLeft: '6px', fontSize: '11px', color: '#6b7280' }}>({d.prioridad})</span> : ''}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                        {[s?.direccion, s?.barrio, s?.ciudad].filter(Boolean).join(', ') || ruta || '—'} · {fmt(d.hora_despacho)}
+                      </div>
+                      {trip && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>👥 {trip}</div>}
+                    </div>
+                    <span style={chip(e.bg, e.c)}>{e.l}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        ) : cargando ? <p style={{ color: '#9ca3af', fontSize: '13px' }}>Cargando…</p> : lista.length === 0 ? <p style={{ color: '#9ca3af', fontSize: '13px' }}>Sin servicios.</p> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {lista.map(d => {
               const s = d.solicitud; const e = EST[d.estado_despacho_id] ?? EST[1]; const mot = s?.solicitud_emergencia?.motivo_consulta;
