@@ -44,6 +44,7 @@ export default function UsuariosPage() {
   const [rolEditando, setRolEditando] = useState('');
   const [guardandoRol, setGuardandoRol] = useState(false);
   const [passwordGenerada, setPasswordGenerada] = useState('');
+  const [passwordReset, setPasswordReset] = useState<{ nombre: string; documento: string; password: string } | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [documento, setDocumento] = useState('');
@@ -196,6 +197,21 @@ export default function UsuariosPage() {
     }
   };
 
+  const resetearPassword = async (u: Usuario) => {
+    if (!confirm(`¿Restablecer la contraseña de ${getNombre(u)} a la clave por defecto? Deberá cambiarla al ingresar.`)) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/usuarios/${u.id}/resetear-password`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error ?? 'No se pudo restablecer la contraseña'); return; }
+      setPasswordReset({ nombre: data.usuario, documento: data.nro_documento, password: data.password_generada });
+    } catch { alert('Error de conexión'); }
+  };
+
   const handleGuardar = async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
@@ -337,11 +353,12 @@ export default function UsuariosPage() {
                   </span>
                 </td>
                 <td style={{ padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const }}>
                     <button onClick={() => handleEditar(u)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#374151' }}>Editar</button>
                     <button onClick={() => toggleActivo(u.id, u.activo)} style={{ background: 'transparent', border: `0.5px solid ${u.activo ? '#fecaca' : '#bbf7d0'}`, padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: u.activo ? '#dc2626' : '#15803d' }}>
                       {u.activo ? 'Desactivar' : 'Activar'}
                     </button>
+                    <button onClick={() => resetearPassword(u)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#c2410c' }}>🔑 Reset clave</button>
                   </div>
                 </td>
               </tr>
@@ -500,6 +517,24 @@ export default function UsuariosPage() {
                 {guardandoRol ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal contraseña restablecida */}
+      {passwordReset && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
+          <div style={{ background: 'white', borderRadius: '12px', padding: '28px', width: '440px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', textAlign: 'center' }}>
+            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔑</div>
+            <h2 style={{ fontSize: '16px', fontWeight: 500, color: '#0a2540', marginBottom: '6px' }}>Contraseña restablecida</h2>
+            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '18px' }}>
+              {passwordReset.nombre} (CI: {passwordReset.documento}) deberá cambiarla en el próximo ingreso.
+            </p>
+            <div style={{ background: '#f0fdf4', border: '0.5px solid #bbf7d0', borderRadius: '8px', padding: '16px', marginBottom: '22px' }}>
+              <div style={{ fontSize: '12px', color: '#15803d', marginBottom: '6px' }}>Nueva contraseña</div>
+              <div style={{ fontSize: '22px', fontWeight: 500, color: '#0a2540', letterSpacing: '2px' }}>{passwordReset.password}</div>
+            </div>
+            <button onClick={() => setPasswordReset(null)} style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: '#0a2540', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>Cerrar</button>
           </div>
         </div>
       )}
