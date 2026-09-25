@@ -388,7 +388,7 @@ CREATE TABLE IF NOT EXISTS `solicitud` (
   `referencia` varchar(200) DEFAULT NULL,
   `latitud` decimal(10,7) DEFAULT NULL,
   `longitud` decimal(10,7) DEFAULT NULL,
-  `prioridad` enum('ROJO','NARANJA','AMARILLO','VERDE') NOT NULL DEFAULT 'VERDE',
+  `prioridad` enum('ROJO','AMARILLO','VERDE','AZUL') NOT NULL DEFAULT 'VERDE',
   `estado` enum('RECIBIDA','EN_REGULACION','DESPACHADA','EN_CAMINO','EN_ATENCION','CERRADA','CANCELADA') NOT NULL DEFAULT 'RECIBIDA',
   `motivo` text NOT NULL,
   `observaciones` text DEFAULT NULL,
@@ -406,7 +406,7 @@ CREATE TABLE IF NOT EXISTS `solicitud` (
 INSERT INTO `solicitud` (`id`, `tipo_solicitud_id`, `canal_id`, `recepcionista_id`, `paciente_nombre`, `paciente_edad`, `paciente_doc`, `direccion`, `referencia`, `latitud`, `longitud`, `prioridad`, `estado`, `motivo`, `observaciones`, `fecha_hora`) VALUES
 	(1, 1, 1, 7, 'Juan Pérez', 45, NULL, 'Av. Mcal. López 2500, Asunción', NULL, NULL, NULL, 'ROJO', 'DESPACHADA', 'Dolor precordial irradiado a brazo izquierdo, dificultad respiratoria', NULL, '2026-06-02 09:29:49'),
 	(2, 2, 2, 7, 'María Gómez', 70, NULL, 'Calle Tacuary 890, Asunción', NULL, NULL, NULL, 'AMARILLO', 'EN_CAMINO', 'Traslado post-quirúrgico a Hospital de Clínicas', NULL, '2026-06-02 09:29:49'),
-	(3, 3, 1, 7, 'Roberto Cáceres', 58, NULL, 'Hospital Barrio Obrero, Asunción', NULL, NULL, NULL, 'NARANJA', 'EN_REGULACION', 'Referencia de cama UCI desde Barrio Obrero hacia Hospital de Trauma', NULL, '2026-06-02 09:29:49'),
+	(3, 3, 1, 7, 'Roberto Cáceres', 58, NULL, 'Hospital Barrio Obrero, Asunción', NULL, NULL, NULL, 'ROJO', 'EN_REGULACION', 'Referencia de cama UCI desde Barrio Obrero hacia Hospital de Trauma', NULL, '2026-06-02 09:29:49'),
 	(4, 1, 4, 7, 'Sofía Ramírez', 30, NULL, 'Ruta 2 Km 8, San Lorenzo', NULL, NULL, NULL, 'ROJO', 'RECIBIDA', 'Accidente de tránsito, trauma múltiple, inconsciente', NULL, '2026-06-02 09:29:49');
 
 -- Volcando estructura para tabla seme_db.tipo_documento
@@ -495,7 +495,7 @@ INSERT INTO `usuario` (`id`, `persona_id`, `rol_id`, `username`, `password`, `ca
 CREATE TABLE `v_solicitudes_activas` (
 	`id` INT(10) UNSIGNED NOT NULL,
 	`fecha_hora` DATETIME NOT NULL,
-	`prioridad` ENUM('ROJO','NARANJA','AMARILLO','VERDE') NOT NULL COLLATE 'utf8mb4_unicode_ci',
+	`prioridad` ENUM('ROJO','AMARILLO','VERDE','AZUL') NOT NULL COLLATE 'utf8mb4_unicode_ci',
 	`estado` ENUM('RECIBIDA','EN_REGULACION','DESPACHADA','EN_CAMINO','EN_ATENCION','CERRADA','CANCELADA') NOT NULL COLLATE 'utf8mb4_unicode_ci',
 	`paciente_nombre` VARCHAR(1) NOT NULL COLLATE 'utf8mb4_unicode_ci',
 	`direccion` VARCHAR(1) NOT NULL COLLATE 'utf8mb4_unicode_ci',
@@ -617,7 +617,7 @@ JOIN usuario        u  ON u.id  = s.recepcionista_id
 JOIN persona        p  ON p.id  = u.persona_id
 WHERE s.estado NOT IN ('CERRADA','CANCELADA')
 ORDER BY
-    FIELD(s.prioridad, 'ROJO','NARANJA','AMARILLO','VERDE'),
+    FIELD(s.prioridad, 'ROJO','AMARILLO','VERDE','AZUL'),
     s.fecha_hora ASC 
 ;
 

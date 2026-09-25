@@ -2,8 +2,9 @@
 
 import { API_URL } from '@/app/lib/api';
 import { useState } from 'react';
+import { imprimirDesdePlantilla } from '@/app/lib/plantillas';
 
-export default function ModalReciboCombustible({ orden, onCerrar, onGuardado }: { orden: any; onCerrar: () => void; onGuardado?: () => void }) {
+export default function ModalReciboCombustible({ orden, onCerrar, onGuardado, jefe = 'Jefe de Transporte' }: { orden: any; onCerrar: () => void; onGuardado?: () => void; jefe?: string }) {
   const hoy = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({ fecha: hoy, litros: '', monto_gs: '', nro_tickets: '', codigo_autorizacion: '' });
   const [guardando, setGuardando] = useState(false);
@@ -29,29 +30,27 @@ export default function ModalReciboCombustible({ orden, onCerrar, onGuardado }: 
 
   const imprimir = () => {
     const r = recibo;
-    const bloque = (copia: boolean) => `
-      <div style="border:1px solid #000; padding:16px; margin-bottom:14px; font-size:13px;">
-        <div style="text-align:center; font-weight:bold; line-height:1.4;">
-          MINISTERIO DE SALUD PÚBLICA Y BIENESTAR SOCIAL<br>SERVICIO DE EMERGENCIAS MÉDICAS EXTRAHOSPITALARIAS<br>DEPARTAMENTO DE TRANSPORTE
-        </div>
-        <div style="display:flex; justify-content:space-between; margin-top:10px;">
-          <b>RECIBO DE CONTROL INTERNO N°: ${r.nro_recibo}</b><span>FECHA: ${new Date(r.fecha).toLocaleDateString('es-PY')}</span>
-        </div>
-        <p style="margin:10px 0;">Recibí de la Unidad Administrativa la cantidad de
-          <b>${Number(r.litros).toFixed(2)} litros</b> (Gs. ${r.monto_gs ? Number(r.monto_gs).toLocaleString('es-PY') : '—'}) de combustible (${orden.movil?.tipo_combustible ?? 'GASOIL'}),
-          N° de tickets: <b>${r.nro_tickets ?? '—'}</b>, para tareas según
-          <b>Orden de Trabajo N° ${orden.nro_orden}</b> en el móvil <b>${orden.movil?.cod_movil ?? '—'}</b>.</p>
-        <div>N° de tarjeta asignada: <b>${r.nro_tarjeta ?? '—'}</b> · Código de autorización: <b>${r.codigo_autorizacion ?? '—'}</b></div>
-        <div style="margin-top:26px; display:flex; justify-content:space-between; text-align:center;">
-          <div>………………………………<br>Firma / Aclaración: ${nombreCond}<br>C.I. N°: ${ciCond}</div>
-          <div>………………………………<br>Jefe de Transporte</div>
-        </div>
-        ${copia ? '<div style="text-align:center; margin-top:6px; font-size:11px;">COPIA DEL ORIGINAL</div>' : ''}
-      </div>`;
-    const w = window.open('', '', 'width=800,height=900');
-    if (!w) return;
-    w.document.write(`<html><head><title>Recibo ${r.nro_recibo}</title></head><body onload="print()">${bloque(false)}${bloque(true)}</body></html>`);
-    w.document.close();
+    let usuarioGen = '—';
+    try { usuarioGen = JSON.parse(localStorage.getItem('usuario') || '{}').nombre || '—'; } catch {}
+    const gen = new Date().toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    imprimirDesdePlantilla('RECIBO', {
+      logo: `${location.origin}/logo-seme.png`,
+      nro_recibo: r.nro_recibo ?? '—',
+      fecha: r.fecha ? new Date(r.fecha).toLocaleDateString('es-PY') : '—',
+      litros: r.litros != null ? Number(r.litros).toFixed(2) : '—',
+      monto_gs: r.monto_gs ? Number(r.monto_gs).toLocaleString('es-PY') : '—',
+      combustible: orden.movil?.tipo_combustible ?? 'GASOIL',
+      nro_tickets: r.nro_tickets ?? '—',
+      nro_orden: orden.nro_orden,
+      cod_movil: orden.movil?.cod_movil ?? '—',
+      nro_tarjeta: r.nro_tarjeta ?? '—',
+      codigo_autorizacion: r.codigo_autorizacion ?? '—',
+      conductor: nombreCond,
+      ci: ciCond,
+      jefe,
+      generado: gen,
+      usuario: usuarioGen,
+    }, token());
   };
 
   const inp = { width: '100%', padding: '9px 12px', borderRadius: '7px', border: '0.5px solid #e5e7eb', fontSize: '13px', boxSizing: 'border-box' as const };

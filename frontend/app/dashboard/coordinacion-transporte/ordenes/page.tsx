@@ -4,6 +4,7 @@ import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import ModalReciboCombustible from '../../../components/ModalReciboCombustible';
 import { esSoloLectura } from '@/lib/permisos';
+import { imprimirDesdePlantilla } from '@/app/lib/plantillas';
 
 interface Orden {
   id: number;
@@ -199,161 +200,70 @@ export default function OrdenesPage() {
     `${u.usuario.persona.primer_nombre} ${u.usuario.persona.primer_apellido}`;
 
   const imprimirOrdenTrabajo = (orden: Orden) => {
-    const ventana = window.open('', '_blank');
-    if (!ventana) return;
     const gen = new Date(orden.created_at).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const usuarioGen = `${orden.creador?.persona?.primer_nombre ?? ''} ${orden.creador?.persona?.primer_apellido ?? ''}`.trim() || '—';
-    const html = `
-<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Orden de Trabajo ${orden.nro_orden}</title>
-<style>
-  @page { size: A4 portrait; margin: 9mm; }
-  body { font-family: Arial, sans-serif; font-size: 10px; margin: 0; color: #000; }
-  .header { text-align: center; margin-bottom: 6px; }
-  .header img { height: 54px; }
-  .header .l1 { font-weight: bold; font-size: 11px; }
-  .header .l2 { font-size: 10px; }
-  .titulo { font-size: 15px; font-weight: bold; }
-  .fila { display: flex; gap: 16px; margin-bottom: 4px; align-items: flex-end; }
-  .fila div label { font-weight: bold; }
-  .fila div span { border-bottom: 1px solid #000; display: inline-block; min-width: 70px; min-height: 13px; }
-  .trabajos { border: 1px solid #000; min-height: 42px; padding: 5px; margin-top: 4px; }
-  .firmas { display: flex; justify-content: space-between; margin-top: 24px; text-align: center; }
-  .firma { width: 30%; }
-  .firma-linea { border-top: 1px solid #000; padding-top: 4px; margin-top: 22px; font-weight: bold; }
-  .meta { margin-top: 10px; font-size: 9px; color: #444; }
-  .pie { text-align: center; margin-top: 6px; font-size: 9px; border-top: 1px solid #000; padding-top: 5px; }
-  .tipo-box { border: 2px solid #000; padding: 1px 8px; font-weight: bold; display: inline-block; }
-</style></head><body>
-  <div class="header">
-    <img src="${location.origin}/logo-seme.png" />
-    <div class="l1">MINISTERIO DE SALUD PÚBLICA Y BIENESTAR SOCIAL</div>
-    <div class="l1">SERVICIO DE EMERGENCIAS MÉDICAS EXTRAHOSPITALARIAS (S.E.M.E.)</div>
-    <div class="l2"><strong>DEPARTAMENTO DE TRANSPORTE</strong></div>
-  </div>
-  <div style="display:flex; align-items:center; gap:20px; margin:6px 0;">
-    <div class="titulo">ORDEN DE TRABAJO N°</div><div style="font-size:18px; font-weight:bold;">${orden.nro_orden}</div>
-  </div>
-  <div style="display:flex; gap:30px; margin-bottom:8px;">
-    <div>ORDINARIO <span class="tipo-box">${orden.tipo === 'ORDINARIO' ? 'X' : '&nbsp;&nbsp;'}</span></div>
-    <div>EXTRAORDINARIO <span class="tipo-box">${orden.tipo === 'EXTRAORDINARIO' ? 'X' : '&nbsp;&nbsp;'}</span></div>
-  </div>
-  <div class="fila">
-    <div><label>Vehículo Tipo: </label><span>${orden.movil.tipo}</span></div>
-    <div><label>Chapa N°: </label><span>${orden.movil.placa ?? '—'}</span></div>
-    <div><label>Marca: </label><span>${orden.movil.marca ?? '—'}</span></div>
-    <div><label>Modelo: </label><span>${orden.movil.modelo ?? '—'}</span></div>
-  </div>
-  <div class="fila">
-    <div><label>Código de Móvil: </label><span>${orden.movil.cod_movil}</span></div>
-    <div><label>R.A.S.P. N°: </label><span>${orden.movil.rasp ?? 'EN TRAMITE'}</span></div>
-    <div><label>Área Asignada: </label><span>${orden.area_asignada}</span></div>
-  </div>
-  <div class="fila"><div><label>N° de Orden Asignado: </label><span>${orden.movil.nro_orden ?? 'EN TRAMITE'}</span></div></div>
-  <div class="fila">
-    <div style="flex:2"><label>Conductor/es Autorizado/s: </label><span style="min-width:200px">${getNombreConductor(orden).toUpperCase()}</span></div>
-    <div><label>C.I. N°: </label><span>${orden.conductor.persona.nro_documento}</span></div>
-  </div>
-  <div class="fila">
-    <div><label>Fecha de la misión: Desde </label><span>${new Date(orden.fecha_inicio).toLocaleDateString('es-PY')}</span></div>
-    <div><label>Hasta el: </label><span>${new Date(orden.fecha_fin).toLocaleDateString('es-PY')}</span></div>
-  </div>
-  <div class="fila">
-    <div><label>Hora de la misión: Desde las </label><span>${orden.hora_inicio}</span></div>
-    <div><label>Hasta las </label><span>${orden.hora_fin}</span></div>
-  </div>
-  <div class="fila"><div><label>Km. De Salida: </label><span>${orden.km_salida?.toLocaleString() ?? ''}</span></div>
-    <div><label>Km. De Llegada: </label><span>${orden.km_llegada?.toLocaleString() ?? ''}</span></div>
-    <div><label>Total recorrido: </label><span>${orden.km_llegada && orden.km_salida ? (orden.km_llegada - orden.km_salida).toLocaleString() : ''}</span></div></div>
-  <div class="fila">
-    <div><label>Km. Estimado a recorrer: </label><span>${orden.km_estimado?.toLocaleString() ?? ''}</span></div>
-    <div><label>Consumo estimado x 100Km.: </label><span>${orden.movil.consumo_l100km ?? ''}</span> Lts.</div>
-  </div>
-  <div style="margin:10px 0;"><strong>TRABAJOS A REALIZAR:</strong><div class="trabajos">${orden.trabajos ?? ''}</div></div>
-  <div class="firmas">
-    <div class="firma"><div>${new Date(orden.fecha_inicio).toLocaleDateString('es-PY')}</div><div class="firma-linea">FECHA</div></div>
-    <div class="firma"><div>${getNombreConductor(orden).toUpperCase()}</div><div class="firma-linea">CONDUCTOR</div></div>
-    <div class="firma"><div>${jefeTransporte}</div><div class="firma-linea">FIRMA AUTORIZADA</div></div>
-  </div>
-  <div class="meta">Generado el ${gen} por ${usuarioGen}</div>
-  <div class="pie">
-    <p>ORIGINAL: Conductor del Móvil &nbsp;·&nbsp; Copia: Transporte</p>
-    <p>Avda. Fdo. De la Mora E/ Dr. Venza &nbsp;·&nbsp; Telefax: 021-562.903 &nbsp;·&nbsp; E-mail: seme@mspsbs.gov.py &nbsp;·&nbsp; Urgencias y Emergencias: 141</p>
-    <p><strong>ASUNCIÓN - PARAGUAY</strong></p>
-  </div>
-  <script>window.onload = () => window.print();</script>
-</body></html>`;
-    ventana.document.write(html); ventana.document.close();
+    const kmTotal = orden.km_llegada && orden.km_salida ? (orden.km_llegada - orden.km_salida).toLocaleString() : '';
+    imprimirDesdePlantilla('ORDEN', {
+      logo: `${location.origin}/logo-seme.png`,
+      nro_orden: orden.nro_orden,
+      tipo_ord_x: orden.tipo === 'ORDINARIO' ? 'X' : '',
+      tipo_ext_x: orden.tipo === 'EXTRAORDINARIO' ? 'X' : '',
+      vehiculo_tipo: orden.movil.tipo,
+      chapa: orden.movil.placa ?? '—',
+      marca: orden.movil.marca ?? '—',
+      modelo: orden.movil.modelo ?? '—',
+      cod_movil: orden.movil.cod_movil,
+      rasp: orden.movil.rasp ?? 'EN TRAMITE',
+      area: orden.area_asignada,
+      nro_orden_asignado: orden.movil.nro_orden ?? 'EN TRAMITE',
+      conductor: getNombreConductor(orden).toUpperCase(),
+      ci: orden.conductor.persona.nro_documento,
+      fecha_inicio: new Date(orden.fecha_inicio).toLocaleDateString('es-PY'),
+      fecha_fin: new Date(orden.fecha_fin).toLocaleDateString('es-PY'),
+      hora_inicio: orden.hora_inicio,
+      hora_fin: orden.hora_fin,
+      km_salida: orden.km_salida?.toLocaleString() ?? '',
+      km_llegada: orden.km_llegada?.toLocaleString() ?? '',
+      km_total: kmTotal,
+      km_estimado: orden.km_estimado?.toLocaleString() ?? '',
+      consumo: orden.movil.consumo_l100km?.toString() ?? '',
+      trabajos: orden.trabajos ?? '',
+      jefe: jefeTransporte,
+      generado: gen,
+      usuario: usuarioGen,
+    }, token());
   };
 
   const imprimirAnexoIII = (orden: Orden) => {
-    const ventana = window.open('', '_blank');
-    if (!ventana) return;
     const esNafta = (orden.movil.tipo_combustible ?? 'GASOIL') === 'NAFTA';
     const gen = new Date(orden.created_at).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const usuarioGen = `${orden.creador?.persona?.primer_nombre ?? ''} ${orden.creador?.persona?.primer_apellido ?? ''}`.trim() || '—';
-    const html = `
-<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Anexo III - ${orden.nro_orden}</title>
-<style>
-  @page { size: A4 landscape; margin: 8mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; color: #000; }
-  .header { text-align:center; margin-bottom:6px; } .header img { height:50px; } .header .l1 { font-weight:bold; font-size:12px; }
-  h2 { text-align: center; font-size: 14px; margin: 3px 0; } h3 { text-align: center; font-size: 12px; margin: 3px 0; }
-  .fila { display: flex; gap: 24px; margin-bottom: 6px; align-items: flex-end; }
-  .fila label { font-weight: bold; } .fila span { border-bottom: 1px solid #000; display: inline-block; min-width: 90px; min-height: 14px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { border: 1px solid #000; padding: 2px 6px; text-align: center; font-size: 10px; } th { background: #f0f0f0; }
-  .firmas { display: flex; justify-content: space-between; margin-top: 30px; } .firma { text-align: center; width: 42%; }
-  .firma-linea { border-top: 1px solid #000; padding-top: 4px; margin-top: 26px; }
-  .check-box { border: 1px solid #000; display: inline-block; width: 14px; height: 14px; text-align: center; line-height: 14px; }
-  .meta { margin-top: 10px; font-size: 9px; color: #444; }
-</style></head><body>
-  <div class="header"><img src="${location.origin}/logo-seme.png" />
-    <div class="l1">MINISTERIO DE SALUD PÚBLICA Y BIENESTAR SOCIAL</div>
-    <div class="l1">SERVICIO DE EMERGENCIAS MÉDICAS EXTRAHOSPITALARIAS (S.E.M.E.)</div>
-    <div class="l2"><strong>DEPARTAMENTO DE TRANSPORTE</strong></div>
-  </div>
-  <h2>PARTE DIARIO DE USO DEL VEHÍCULO OFICIAL - ANEXO : III</h2><!--<h3>PARTE DIARIO DE USO DEL VEHÍCULO OFICIAL</h3>-->
-  <div class="fila" style="margin-top:10px;">
-    <div><label>FECHA: </label><span>${new Date(orden.fecha_inicio).toLocaleDateString('es-PY')}</span></div>
-    <div><label>Orden de Trabajo N°: </label><span>${orden.nro_orden}</span></div>
-  </div>
-  <div class="fila">
-    <div><label>TIPO DE VEHÍCULO: </label><span>${orden.movil.tipo}</span></div>
-    <div><label>CHAPA N°: </label><span>${orden.movil.placa ?? '—'}</span></div>
-    <div><label>TIPO DE COMBUSTIBLE</label>
-      <div style="display:flex; gap:16px; margin-top:4px;">
-        <div><span class="check-box">${esNafta ? 'X' : ''}</span> NAFTA</div>
-        <div><span class="check-box">${esNafta ? '' : 'X'}</span> GAS OIL</div>
-      </div>
-    </div>
-  </div>
-  <div class="fila">
-    <div><label>Código de Móvil: </label><span>${orden.movil.cod_movil}</span></div>
-    <div><label>R.A.S.P. N°: </label><span>${orden.movil.rasp ?? 'EN TRAMITE'}</span></div>
-  </div>
-  <div class="fila">
-    <div><label>MARCA: </label><span>${orden.movil.marca ?? '—'}</span></div>
-    <div><label>N° DE ORDEN ASIGNADO: </label><span>${orden.movil.nro_orden ?? 'EN TRAMITE'}</span></div>
-  </div>
-  <div class="fila">
-    <div><label>MODELO: </label><span>${orden.movil.modelo ?? '—'}</span></div>
-    <div><label>CONSUMO X 100 KM.: </label><span>${orden.movil.consumo_l100km ?? '—'}</span> Lts.</div>
-  </div>
-  <table>
-    <thead><tr><th>Fecha Inicio</th><th>Fecha Término</th><th>Actividad</th><th>Km. Salida</th><th>Km. Regreso</th><th>Km. Total</th><th>Litros</th><th>Cupos en Gs.</th></tr></thead>
-    <tbody>
-      <tr><td>${new Date(orden.fecha_inicio).toLocaleDateString('es-PY')}</td><td>${new Date(orden.fecha_fin).toLocaleDateString('es-PY')}</td><td></td><td>${orden.km_salida?.toLocaleString() ?? ''}</td><td>${orden.km_llegada?.toLocaleString() ?? ''}</td><td>${orden.km_llegada && orden.km_salida ? (orden.km_llegada - orden.km_salida).toLocaleString() : ''}</td><td></td><td></td></tr>
-      ${Array.from({ length: 20 }).map(() => '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
-    </tbody>
-  </table>
-  <div class="firmas">
-    <div class="firma"><div class="firma-linea">Conductor: <strong>${getNombreConductor(orden).toUpperCase()}</strong><br>C.I. N°: ${orden.conductor.persona.nro_documento}</div></div>
-    <div class="firma"><div class="firma-linea">${jefeTransporte}<br>Jefe de Transporte</div></div>
-  </div>
-  <div class="meta">Generado el ${gen} por ${usuarioGen}</div>
-  <script>window.onload = () => window.print();</script>
-</body></html>`;
-    ventana.document.write(html); ventana.document.close();
+    const fInicio = new Date(orden.fecha_inicio).toLocaleDateString('es-PY');
+    const fFin = new Date(orden.fecha_fin).toLocaleDateString('es-PY');
+    const kmTotal = orden.km_llegada && orden.km_salida ? (orden.km_llegada - orden.km_salida).toLocaleString() : '';
+    const filaDatos = `<tr><td>${fInicio}</td><td>${fFin}</td><td></td><td>${orden.km_salida?.toLocaleString() ?? ''}</td><td>${orden.km_llegada?.toLocaleString() ?? ''}</td><td>${kmTotal}</td><td></td><td></td></tr>`;
+    const filasBlanco = Array.from({ length: 20 }).map(() => '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('');
+    imprimirDesdePlantilla('ANEXO_III', {
+      logo: `${location.origin}/logo-seme.png`,
+      nro_orden: orden.nro_orden,
+      fecha_inicio: fInicio,
+      vehiculo_tipo: orden.movil.tipo,
+      chapa: orden.movil.placa ?? '—',
+      comb_nafta_x: esNafta ? 'X' : '',
+      comb_gasoil_x: esNafta ? '' : 'X',
+      cod_movil: orden.movil.cod_movil,
+      rasp: orden.movil.rasp ?? 'EN TRAMITE',
+      marca: orden.movil.marca ?? '—',
+      modelo: orden.movil.modelo ?? '—',
+      nro_orden_asignado: orden.movil.nro_orden ?? 'EN TRAMITE',
+      consumo: orden.movil.consumo_l100km?.toString() ?? '—',
+      filas_anexo: filaDatos + filasBlanco,
+      conductor: getNombreConductor(orden).toUpperCase(),
+      ci: orden.conductor.persona.nro_documento,
+      jefe: jefeTransporte,
+      generado: gen,
+      usuario: usuarioGen,
+    }, token());
   };
 
   const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: '7px', border: '0.5px solid #e5e7eb', fontSize: '13px', boxSizing: 'border-box' as const };
@@ -577,7 +487,7 @@ export default function OrdenesPage() {
 
       {/* Modal recibo de combustible */}
       {reciboOrden && (
-        <ModalReciboCombustible orden={reciboOrden} onCerrar={() => setReciboOrden(null)} onGuardado={cargarOrdenes} />
+        <ModalReciboCombustible orden={reciboOrden} jefe={jefeTransporte} onCerrar={() => setReciboOrden(null)} onGuardado={cargarOrdenes} />
       )}
     </div>
   );
