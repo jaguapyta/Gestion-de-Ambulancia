@@ -28,15 +28,11 @@ export default function CambiarPasswordPage() {
     setError('');
     try {
       await api.post('/auth/cambiar-password', { password });
-      const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
-      usuario.debe_cambiar_password = false;
-      localStorage.setItem('usuario', JSON.stringify(usuario));
-      const rol = usuario.rol;
-      if (rol === 'ADMINISTRADOR') router.push('/admin');
-      else if (rol === 'RECEPCIONISTA') router.push('/recepcion');
-      else if (rol === 'DESPACHANTE') router.push('/despacho');
-      else if (rol === 'MEDICO') router.push('/medico');
-      else router.push('/');
+      // Tras cambiar la contraseña se cierra la sesión y se vuelve al login,
+      // para que el usuario ingrese de nuevo con su clave definitiva.
+      localStorage.removeItem('token');
+      localStorage.removeItem('usuario');
+      router.replace('/login');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al cambiar contraseña');
     } finally {

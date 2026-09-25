@@ -43,6 +43,13 @@ const modulosPorRol: Record<string, { label: string; desc: string; href: string;
     { label: 'Servicios', desc: 'Panel de tripulación en servicio', href: '/dashboard/servicios', color: '#7c3aed', icon: '👨‍⚕️' },
     { label: 'Estadísticas', desc: 'Reportes e indicadores del área', href: '/dashboard/estadisticas', color: '#0f766e', icon: '📊' },
   ],
+  DIRECCION: [
+    { label: 'Centro de regulación', desc: 'Supervisión de recepción, despacho y regulación', href: '/dashboard/sala-operaciones', color: '#1d4ed8', icon: '🚨' },
+    { label: 'Coordinación operativa', desc: 'Supervisión de guardias y tripulación', href: '/dashboard/coordinacion-operativa', color: '#0f6e56', icon: '🎯' },
+    { label: 'Coordinación de transporte', desc: 'Supervisión de órdenes de trabajo', href: '/dashboard/coordinacion-transporte', color: '#854f0b', icon: '🚐' },
+    { label: 'Servicios', desc: 'Panel de tripulación en servicio', href: '/dashboard/servicios', color: '#7c3aed', icon: '👨‍⚕️' },
+    { label: 'Estadísticas', desc: 'Reportes e indicadores del sistema', href: '/dashboard/estadisticas', color: '#0f766e', icon: '📊' },
+  ],
 };
 
 export default function DashboardPage() {

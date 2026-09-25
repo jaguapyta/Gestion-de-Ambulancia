@@ -20,6 +20,12 @@ const MEDICO_REGULADOR = 'MEDICO_REGULADOR';
 const COORD_ESTADISTICAS = 'COORDINADOR_ESTADISTICAS';
 const ASISTENTE_ESTADISTICAS = 'ASISTENTE_ESTADISTICAS';
 
+// Dirección: rol de supervisión de SOLO LECTURA. Ve todo el sistema salvo
+// Administración (y salvo la ficha médica, por ser dato clínico del paciente).
+// No participa de ninguna mutación: no se agrega a los grupos de gestión ni
+// a las rutas POST/PUT/PATCH/DELETE.
+const DIRECCION = 'DIRECCION';
+
 // Potestad: qué rol puede administrar el legajo de qué tipo de funcionario.
 // Cada área gestiona su propio personal; dentro del Centro de Regulación
 // la cadena es coordinador → supervisor → ARM / médico regulador.
@@ -42,38 +48,38 @@ module.exports = {
   ADMINISTRACION: [ADMIN],
 
   // Estadísticas: jefaturas operativas + el área de Estadísticas
-  LEER_ESTADISTICAS: [ADMIN, COORD_OPERATIVO, COORD_TRANSPORTE, COORD_REGULACION, COORD_ESTADISTICAS, ASISTENTE_ESTADISTICAS],
+  LEER_ESTADISTICAS: [ADMIN, COORD_OPERATIVO, COORD_TRANSPORTE, COORD_REGULACION, COORD_ESTADISTICAS, ASISTENTE_ESTADISTICAS, DIRECCION],
 
   // Móviles: los usan Administración, Transporte y el armado de guardias
-  LEER_MOVILES: [ADMIN, COORD_TRANSPORTE, ASISTENTE_TRANSPORTE, COORD_OPERATIVO],
+  LEER_MOVILES: [ADMIN, COORD_TRANSPORTE, ASISTENTE_TRANSPORTE, COORD_OPERATIVO, DIRECCION],
 
   // Bases: Administración las gestiona, Coordinación Operativa las asigna a móviles
-  LEER_BASES: [ADMIN, COORD_OPERATIVO],
+  LEER_BASES: [ADMIN, COORD_OPERATIVO, DIRECCION],
 
   // Personal de cada área
-  LEER_PARAMEDICOS: [ADMIN, COORD_OPERATIVO],
-  LEER_CONDUCTORES: [ADMIN, COORD_TRANSPORTE, ASISTENTE_TRANSPORTE],
+  LEER_PARAMEDICOS: [ADMIN, COORD_OPERATIVO, DIRECCION],
+  LEER_CONDUCTORES: [ADMIN, COORD_TRANSPORTE, ASISTENTE_TRANSPORTE, DIRECCION],
 
   // Personal del Centro de Regulación
-  LEER_MEDICOS: [ADMIN, COORD_REGULACION, SUPERVISOR],
-  LEER_ARM:     [ADMIN, COORD_REGULACION, SUPERVISOR],
-  LEER_SUPERVISORES: [ADMIN, COORD_REGULACION],
+  LEER_MEDICOS: [ADMIN, COORD_REGULACION, SUPERVISOR, DIRECCION],
+  LEER_ARM:     [ADMIN, COORD_REGULACION, SUPERVISOR, DIRECCION],
+  LEER_SUPERVISORES: [ADMIN, COORD_REGULACION, DIRECCION],
 
   // Guardias: las arma Coordinación Operativa, las consulta el Centro de Regulación
-  LEER_GUARDIAS: [ADMIN, COORD_OPERATIVO, COORD_REGULACION, SUPERVISOR],
+  LEER_GUARDIAS: [ADMIN, COORD_OPERATIVO, COORD_REGULACION, SUPERVISOR, DIRECCION],
 
   // Órdenes de trabajo: solo Transporte
-  LEER_ORDENES: [ADMIN, COORD_TRANSPORTE, ASISTENTE_TRANSPORTE],
+  LEER_ORDENES: [ADMIN, COORD_TRANSPORTE, ASISTENTE_TRANSPORTE, DIRECCION],
 
   // Estados temporales: toda jefatura que gestione personal
-  LEER_ESTADOS: [ADMIN, COORD_OPERATIVO, COORD_TRANSPORTE, COORD_REGULACION, SUPERVISOR],
+  LEER_ESTADOS: [ADMIN, COORD_OPERATIVO, COORD_TRANSPORTE, COORD_REGULACION, SUPERVISOR, DIRECCION],
 
     // Centro de Regulación — operación (recepción y gestión de solicitudes)
-  LEER_SOLICITUDES:      [ADMIN, COORD_REGULACION, SUPERVISOR, ARM, MEDICO_REGULADOR],
+  LEER_SOLICITUDES:      [ADMIN, COORD_REGULACION, SUPERVISOR, ARM, MEDICO_REGULADOR, DIRECCION],
   GESTIONAR_SOLICITUDES: [ADMIN, COORD_REGULACION, SUPERVISOR, ARM, MEDICO_REGULADOR],
 
     // Padrón de dializados: solo Coordinación de Regulación
-  LEER_DIALIZADOS:      [ADMIN, COORD_REGULACION],
+  LEER_DIALIZADOS:      [ADMIN, COORD_REGULACION, DIRECCION],
   GESTIONAR_DIALIZADOS: [ADMIN, COORD_REGULACION],
 
   // Búsqueda de personas por documento: la usan los tres formularios de alta de personal

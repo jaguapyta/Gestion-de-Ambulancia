@@ -10,21 +10,24 @@ const {
 
 const REC = ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA', 'ARM', 'MEDICO_REGULADOR'];
 const ABM = ['ADMINISTRADOR', 'COORDINADOR_REGULACION'];
+// Dirección: solo lectura (ve recepción, protocolo y sinónimos; no crea ni aprueba).
+const VER_REC = [...REC, 'DIRECCION'];
+const VER_ABM = [...ABM, 'DIRECCION'];
 
-router.get('/catalogos', auth, roles(...REC), getCatalogos);
+router.get('/catalogos', auth, roles(...VER_REC), getCatalogos);
 router.post('/', auth, roles(...REC), crearEmergencia);
 
 // Sugerencia de motivo por IA (a partir del relato del llamante)
 router.post('/sugerir-motivo', auth, roles(...REC), sugerirMotivo);
 
 // Editor del protocolo (motivos y preguntas de alarma)
-router.get('/motivos-editor', auth, roles(...ABM), getMotivosEditor);
+router.get('/motivos-editor', auth, roles(...VER_ABM), getMotivosEditor);
 router.patch('/pregunta/:id', auth, roles(...ABM), updatePregunta);
 router.patch('/motivo/:id', auth, roles(...ABM), updateMotivo);
 
 // ABM de sinónimos + circuito de aprobación
-router.get('/sinonimos', auth, roles(...REC), getSinonimos);
-router.get('/sinonimos/pendientes', auth, roles(...ABM), getSinonimosPendientes);
+router.get('/sinonimos', auth, roles(...VER_REC), getSinonimos);
+router.get('/sinonimos/pendientes', auth, roles(...VER_ABM), getSinonimosPendientes);
 router.post('/sinonimos', auth, roles(...REC), crearSinonimo);   // recepcionista propone (PENDIENTE) · jefatura crea (APROBADO)
 router.patch('/sinonimos/:id/aprobar', auth, roles(...ABM), aprobarSinonimo);
 router.patch('/sinonimos/:id/rechazar', auth, roles(...ABM), rechazarSinonimo);
