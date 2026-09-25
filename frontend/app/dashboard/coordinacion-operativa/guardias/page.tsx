@@ -3,6 +3,7 @@
 import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { esSoloLectura } from '@/lib/permisos';
 
 interface Guardia {
   id: number;
@@ -150,9 +151,11 @@ export default function GuardiasPage() {
           <h1 style={{ fontSize: '20px', fontWeight: '500', color: '#0a2540', margin: 0 }}>Guardias</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Agrupador de móviles de guardia · la disponibilidad la define el horario de cada móvil</p>
         </div>
-        <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-          + Nueva guardia
-        </button>
+        {!esSoloLectura(usuario?.rol) && (
+          <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+            + Nueva guardia
+          </button>
+        )}
       </div>
 
       {/* Cards resumen */}

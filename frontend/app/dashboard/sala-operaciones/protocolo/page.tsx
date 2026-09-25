@@ -3,6 +3,7 @@
 import { API_URL } from '@/app/lib/api';
 import { useEffect, useMemo, useState } from 'react';
 import ProtectedRoute from '../../../components/ProtectedRoute';
+import { esSoloLectura } from '@/lib/permisos';
 
 const COLORES: Record<string, { hex: string; bg: string; tx: string }> = {
   ROJO: { hex: '#E24B4A', bg: '#FCEBEB', tx: '#791F1F' },
@@ -17,6 +18,7 @@ export default function ProtocoloPage() {
   const [filtroColor, setFiltroColor] = useState('');
   const [abierto, setAbierto] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [soloLectura, setSoloLectura] = useState(false);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -26,13 +28,18 @@ export default function ProtocoloPage() {
     fetch(`${API_URL}/api/emergencias/motivos-editor`, { headers: headers() })
       .then(r => r.json()).then(d => { if (d.motivos) setMotivos(d.motivos); }).catch(() => { }).finally(() => setCargando(false));
   };
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {}
+    cargar();
+  }, []);
 
   const patchPregunta = async (motivoId: number, preg: any, campos: any) => {
+    if (soloLectura) return; // Dirección: solo lectura
     setMotivos(ms => ms.map(m => m.id !== motivoId ? m : { ...m, preguntas: m.preguntas.map((p: any) => p.id === preg.id ? { ...p, ...campos } : p) }));
     await fetch(`${API_URL}/api/emergencias/pregunta/${preg.id}`, { method: 'PATCH', headers: headers(), body: JSON.stringify(campos) });
   };
   const patchMotivo = async (motivoId: number, color: string) => {
+    if (soloLectura) return; // Dirección: solo lectura
     setMotivos(ms => ms.map(m => m.id === motivoId ? { ...m, color } : m));
     await fetch(`${API_URL}/api/emergencias/motivo/${motivoId}`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ color }) });
   };
@@ -48,7 +55,7 @@ export default function ProtocoloPage() {
   const chip = (col: string, on: boolean, oc: any): React.CSSProperties => ({ padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: on ? `1px solid ${oc.hex}` : '0.5px solid #e5e7eb', background: on ? oc.bg : 'white', color: on ? oc.tx : '#9ca3af' });
 
   return (
-    <ProtectedRoute rolesPermitidos={['ADMINISTRADOR', 'COORDINADOR_REGULACION']}>
+    <ProtectedRoute rolesPermitidos={['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'DIRECCION']}>
       <div>
         <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Protocolo de emergencias</h1>
         <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Color base de cada motivo y qué preguntas escalan la prioridad (según la respuesta). El sistema sugiere; el operador decide.</p>
@@ -103,7 +110,7 @@ export default function ProtocoloPage() {
                           return (
                             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '6px 0', borderBottom: '0.5px solid #f7f7f7' }}>
                               <label style={{ display: 'flex', gap: '6px', alignItems: 'center', flex: 1, minWidth: '200px', fontSize: '12px', color: '#374151', cursor: 'pointer' }}>
-                                <input type="checkbox" checked={p.es_bandera} onChange={e => patchPregunta(m.id, p, { es_bandera: e.target.checked, ...(e.target.checked ? { resp_alarma: p.resp_alarma || 'SI' } : {}) })} />
+                                <input type="checkbox" disabled={soloLectura} checked={p.es_bandera} onChange={e => patchPregunta(m.id, p, { es_bandera: e.target.checked, ...(e.target.checked ? { resp_alarma: p.resp_alarma || 'SI' } : {}) })} />
                                 {p.es_bandera && <span style={{ color: ac.hex }}>⚠</span>} {p.texto}
                               </label>
                               {p.es_bandera && (

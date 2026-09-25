@@ -3,6 +3,7 @@
 import { API_URL } from '@/app/lib/api';
 import { useEffect, useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { esSoloLectura } from '@/lib/permisos';
 
 interface Movil {
   id: number;
@@ -44,6 +45,7 @@ export default function MovilesTransportePage() {
   const [movilEditando, setMovilEditando] = useState<Movil | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [soloLectura, setSoloLectura] = useState(false);
   const [confirmandoBaja, setConfirmandoBaja] = useState<{ moviles: Movil[], accion: 'baja' | 'alta' } | null>(null);
   const [archivoData, setArchivoData] = useState<any[]>([]);
   const [importando, setImportando] = useState(false);
@@ -79,6 +81,7 @@ export default function MovilesTransportePage() {
   };
 
   useEffect(() => {
+    try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {}
     setCargando(true);
     fetch(`${API_URL}/api/ambulancias`, {
       headers: { Authorization: `Bearer ${token()}` }
@@ -275,14 +278,16 @@ export default function MovilesTransportePage() {
           <h1 style={{ fontSize: '20px', fontWeight: '500', color: '#0a2540', margin: 0 }}>Móviles</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Flota de móviles del SEME</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => setModalImportAbierto(true)} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-            📥 Importar Excel
-          </button>
-          <button onClick={() => setModalNuevoAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-            + Nuevo móvil
-          </button>
-        </div>
+        {!soloLectura && (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => setModalImportAbierto(true)} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+              📥 Importar Excel
+            </button>
+            <button onClick={() => setModalNuevoAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+              + Nuevo móvil
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
@@ -302,7 +307,7 @@ export default function MovilesTransportePage() {
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
         <input type="text" placeholder="Buscar por código, placa, tipo o marca..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
           style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '0.5px solid #e5e7eb', fontSize: '14px', boxSizing: 'border-box' as const, outline: 'none' }} />
-        {seleccionados.length > 0 && (
+        {!soloLectura && seleccionados.length > 0 && (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ fontSize: '13px', color: '#6b7280' }}>{seleccionados.length} seleccionado(s)</span>
             <button onClick={() => confirmarCambioEstado('alta')} style={{ padding: '9px 16px', borderRadius: '8px', border: 'none', background: '#15803d', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>✓ Dar de alta</button>
@@ -357,9 +362,11 @@ export default function MovilesTransportePage() {
                   </span>
                 </td>
                 <td style={{ padding: '12px 16px' }}>
-                  <button onClick={() => handleEditar(m)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#374151' }}>
-                    Editar
-                  </button>
+                  {!soloLectura && (
+                    <button onClick={() => handleEditar(m)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#374151' }}>
+                      Editar
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

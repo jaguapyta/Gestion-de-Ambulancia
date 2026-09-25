@@ -3,6 +3,7 @@
 import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '../../../components/ProtectedRoute';
+import { esSoloLectura } from '@/lib/permisos';
 
 interface Persona { id: number; primer_nombre: string; segundo_nombre: string | null; primer_apellido: string; segundo_apellido: string | null; nro_documento: string; tipo_documento: number; sexo: string; fecha_nacimiento: string; }
 interface Paciente { id: number; activo: boolean; centro_dialisis: string; dias_semana: string; hora_turno: string | null; observacion: string | null; persona: Persona; }
@@ -25,6 +26,7 @@ export default function PacientesDializadosPage() {
   const [personaNueva, setPersonaNueva] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [soloLectura, setSoloLectura] = useState(false);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -35,7 +37,10 @@ export default function PacientesDializadosPage() {
       .then(r => r.json()).then(d => { if (Array.isArray(d)) setPacientes(d); })
       .catch(() => { }).finally(() => setCargando(false));
   };
-  useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {}
+    cargar();
+  }, []);
 
   const nombre = (p: Persona) => `${p.primer_nombre} ${p.segundo_nombre ?? ''} ${p.primer_apellido} ${p.segundo_apellido ?? ''}`.trim();
   const filtrados = pacientes.filter(p => nombre(p.persona).toLowerCase().includes(busqueda.toLowerCase()) || p.persona.nro_documento.includes(busqueda) || p.centro_dialisis.toLowerCase().includes(busqueda.toLowerCase()));
@@ -82,14 +87,14 @@ export default function PacientesDializadosPage() {
   const label = { fontSize: '12px', color: '#6b7280', display: 'block' as const, marginBottom: '6px' };
 
   return (
-    <ProtectedRoute rolesPermitidos={['ADMINISTRADOR', 'COORDINADOR_REGULACION']}>
+    <ProtectedRoute rolesPermitidos={['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'DIRECCION']}>
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Pacientes dializados</h1>
             <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Padrón de pacientes en diálisis · Coordinación de Regulación</p>
           </div>
-          <button onClick={abrirNuevo} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>+ Nuevo paciente</button>
+          {!soloLectura && <button onClick={abrirNuevo} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>+ Nuevo paciente</button>}
         </div>
 
         <input type="text" placeholder="Buscar por nombre, CI o centro..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
@@ -116,10 +121,14 @@ export default function PacientesDializadosPage() {
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#6b7280' }}>{horaDe(p.hora_turno) || '—'}</td>
                     <td style={{ padding: '12px 16px' }}><span style={{ background: p.activo ? '#f0fdf4' : '#fef2f2', color: p.activo ? '#15803d' : '#dc2626', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{p.activo ? 'Activo' : 'Inactivo'}</span></td>
                     <td style={{ padding: '12px 16px' }}>
+                      {soloLectura ? (
+                        <span style={{ fontSize: '12px', color: '#9ca3af' }}>—</span>
+                      ) : (
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <button onClick={() => abrirEditar(p)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540' }}>Editar</button>
                         <button onClick={() => toggleActivo(p)} style={{ background: 'transparent', border: `0.5px solid ${p.activo ? '#fecaca' : '#bbf7d0'}`, padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: p.activo ? '#dc2626' : '#15803d', whiteSpace: 'nowrap' }}>{p.activo ? 'Dar de baja' : 'Dar de alta'}</button>
                       </div>
+                      )}
                     </td>
                   </tr>
                 ))}

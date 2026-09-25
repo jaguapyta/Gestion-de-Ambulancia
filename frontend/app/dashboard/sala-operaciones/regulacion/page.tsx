@@ -3,8 +3,9 @@
 import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '../../../components/ProtectedRoute';
+import { esSoloLectura } from '@/lib/permisos';
 
-const REG = ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA', 'MEDICO_REGULADOR'];
+const REG = ['ADMINISTRADOR', 'COORDINADOR_REGULACION', 'SUPERVISOR_GUARDIA', 'MEDICO_REGULADOR', 'DIRECCION'];
 
 const estadoColor = (n: string) => {
   if (n === 'PENDIENTE') return { bg: '#fff7ed', color: '#c2410c' };
@@ -29,6 +30,8 @@ export default function RegulacionPage() {
   const [mostrarResolver, setMostrarResolver] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState('');
+  const [soloLectura, setSoloLectura] = useState(false);
+  useEffect(() => { try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {} }, []);
 
   const token = () => localStorage.getItem('token') ?? '';
   const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` });
@@ -63,6 +66,7 @@ export default function RegulacionPage() {
   };
 
   const guardarLlamada = async () => {
+    if (soloLectura) return;
     if (!caso || !ll.hospital_unidad.trim()) { setMsg('Indicá el hospital / unidad al que llamaste.'); return; }
     setGuardando(true); setMsg('');
     try {
@@ -72,6 +76,7 @@ export default function RegulacionPage() {
   };
 
   const guardarGestion = async (extra?: Partial<typeof g>) => {
+    if (soloLectura) return false;
     if (!caso) return true;
     const body = { ...g, ...extra };
     const res = await fetch(`${API_URL}/api/regulacion/camas/${caso.id}/gestion`, { method: 'PUT', headers: headers(), body: JSON.stringify(body) });
@@ -85,6 +90,7 @@ export default function RegulacionPage() {
   };
 
   const confirmarResuelto = async () => {
+    if (soloLectura) return;
     if (!g.hospital_destino.trim()) { setMsg('Cargá dónde se consiguió la cama.'); return; }
     setGuardando(true); setMsg('');
     try {
@@ -95,6 +101,7 @@ export default function RegulacionPage() {
   };
 
   const cerrar = async () => {
+    if (soloLectura) return;
     if (!cierre.condicion_cierre_id) { setMsg('Elegí el motivo de cierre.'); return; }
     setGuardando(true); setMsg('');
     try {
@@ -190,7 +197,7 @@ export default function RegulacionPage() {
                 {msg && <div style={{ background: '#eff6ff', color: '#1e40af', padding: '8px 12px', borderRadius: '7px', fontSize: '12px', margin: '12px 0' }}>{msg}</div>}
 
                 {/* GESTIÓN: registro de llamadas */}
-                {!cerrado && <>
+                {!cerrado && !soloLectura && <>
                   <div style={seccion}>Gestión — llamadas realizadas</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div><label style={label}>Hospital / unidad donde se llamó</label><input value={ll.hospital_unidad} onChange={e => setLl({ ...ll, hospital_unidad: e.target.value })} placeholder="Ej: Hospital Nacional - UTI" style={input} /></div>
@@ -218,14 +225,14 @@ export default function RegulacionPage() {
                 )}
 
                 {/* Botón marcar resuelto → abre formulario de cama conseguida */}
-                {nombre === 'PENDIENTE' && !mostrarResolver && (
+                {!soloLectura && nombre === 'PENDIENTE' && !mostrarResolver && (
                   <div style={{ marginTop: '18px' }}>
                     <button onClick={() => { setMsg(''); setMostrarResolver(true); }} style={{ padding: '10px 18px', borderRadius: '7px', border: 'none', background: '#1d4ed8', color: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>Marcar RESUELTO (cama conseguida)</button>
                   </div>
                 )}
 
                 {/* Formulario de resolución (cama conseguida + quién traslada) */}
-                {!cerrado && (mostrarResolver || resuelto) && (
+                {!cerrado && !soloLectura && (mostrarResolver || resuelto) && (
                   <div style={{ marginTop: '16px', background: '#eff6ff', border: '0.5px solid #bfdbfe', borderRadius: '10px', padding: '16px' }}>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: '#1d4ed8', marginBottom: '12px' }}>Cama conseguida</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -254,7 +261,7 @@ export default function RegulacionPage() {
                 )}
 
                 {/* Cierre */}
-                {!cerrado && <>
+                {!cerrado && !soloLectura && <>
                   <div style={seccion}>Cerrar caso</div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'end', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: '180px' }}><label style={label}>Motivo de cierre</label>

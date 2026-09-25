@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import CampanaAlertas from '../components/CampanaAlertas';
-import { puedeVer, type Seccion } from '../../lib/permisos';
+import { puedeVer, esSoloLectura, type Seccion } from '../../lib/permisos';
 
 const menuItems: { href: string; label: string; seccion: Seccion }[] = [
   { href: '/dashboard/administracion', label: 'Administración', seccion: 'administracion' },
@@ -190,6 +190,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
         </div>
       </header>
+
+      {esSoloLectura(usuario?.rol) && (
+        <div style={{
+          background: '#fffbeb', borderBottom: '0.5px solid #fde68a', color: '#92400e',
+          padding: '8px 32px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px'
+        }}>
+          👁️ Modo <strong>solo lectura</strong> (Dirección): podés consultar todo el sistema, pero las acciones de carga y edición están deshabilitadas.
+        </div>
+      )}
 
       <main style={{ padding: '28px 32px' }}>
         {children}

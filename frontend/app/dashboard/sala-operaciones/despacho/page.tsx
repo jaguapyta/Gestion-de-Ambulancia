@@ -4,8 +4,9 @@ import { API_URL } from '@/app/lib/api';
 import { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import ProtectedRoute from '../../../components/ProtectedRoute';
+import { esSoloLectura } from '@/lib/permisos';
 
-const DESP = ['ADMINISTRADOR', 'COORDINADOR_OPERATIVO', 'COORDINADOR_TRANSPORTE', 'ASISTENTE_TRANSPORTE', 'SUPERVISOR_GUARDIA'];
+const DESP = ['ADMINISTRADOR', 'COORDINADOR_OPERATIVO', 'COORDINADOR_TRANSPORTE', 'ASISTENTE_TRANSPORTE', 'SUPERVISOR_GUARDIA', 'DIRECCION'];
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
 const estadoMovilColor = (e: string) => e === 'DISPONIBLE' ? '#639922' : e === 'OCUPADO' ? '#BA7517' : '#888780';
@@ -120,7 +121,11 @@ export default function DespachoPage() {
     });
   };
 
+  const [soloLectura, setSoloLectura] = useState(false);
+  useEffect(() => { try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {} }, []);
+
   const guardarUbicacion = async (id: number, lat: number, lng: number) => {
+    if (soloLectura) return;
     await fetch(`${API_URL}/api/despacho/solicitud/${id}/ubicacion`, { method: 'PUT', headers: headers(), body: JSON.stringify({ latitud: lat, longitud: lng }) });
     setMsg(`Ubicación marcada para #${id}`); cargar();
   };
@@ -137,7 +142,7 @@ export default function DespachoPage() {
 
   // Al elegir un móvil: si estamos reasignando (sel.despachoId) va por PATCH; si no, crea el despacho.
   const asignar = async (rgmId: number) => {
-    if (!sel) return;
+    if (!sel || soloLectura) return;
     if (sel.despachoId) {
       const res = await fetch(`${API_URL}/api/despacho/${sel.despachoId}/reasignar`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ rol_guardia_movil_id: rgmId }) });
       if (res.ok) { setMsg(`Pedido #${sel.id} reasignado`); setSel(null); cargar(); }
@@ -150,12 +155,14 @@ export default function DespachoPage() {
   };
 
   const avanzar = async (despachoId: number, estado: number, extra: any = {}) => {
+    if (soloLectura) return;
     const res = await fetch(`${API_URL}/api/despacho/${despachoId}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: estado, ...extra }) });
     if (res.ok) { setCerrando(null); setCond(''); setKm(''); setMotivo(''); cargar(); }
     else { const e = await res.json().catch(() => ({})); setMsg(e.error || 'No se pudo cambiar el estado'); }
   };
 
   const cancelarAsignacion = async (despachoId: number) => {
+    if (soloLectura) return;
     if (!motivo.trim()) { setMsg('Indicá el motivo'); return; }
     const res = await fetch(`${API_URL}/api/despacho/${despachoId}/cancelar-asignacion`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ motivo: motivo.trim() }) });
     if (res.ok) { setCerrando(null); setMotivo(''); setMsg('Asignación cancelada — el servicio volvió a pendiente'); cargar(); }
@@ -163,6 +170,7 @@ export default function DespachoPage() {
   };
 
   const cambiarPrioridad = async (despachoId: number) => {
+    if (soloLectura) return;
     if (!prio) { setMsg('Elegí la prioridad'); return; }
     const res = await fetch(`${API_URL}/api/despacho/${despachoId}/prioridad`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ prioridad: prio, motivo: motivo.trim() || undefined }) });
     if (res.ok) { setCerrando(null); setPrio(''); setMotivo(''); cargar(); }
@@ -183,6 +191,7 @@ export default function DespachoPage() {
   // Controles de avance de estado del servicio en curso (según el estado del despacho).
   const controlesEstado = (d: any) => {
     if (!d) return null;
+    if (soloLectura) return null; // Dirección: solo lectura, sin acciones de despacho
     const est = d.estado_despacho_id;
     const abierto = cerrando?.despachoId === d.id ? cerrando.tipo : null;
     const btn = { fontSize: '10px', padding: '3px 7px', borderRadius: '5px', cursor: 'pointer', border: '0.5px solid #e5e7eb', background: '#fff' } as const;
@@ -273,7 +282,7 @@ export default function DespachoPage() {
               const est = s.estado_solicitud?.nombre; const ch = estChip(est);
               const asignado = movilAsignado(s);
               return (
-                <div key={s.id} onClick={() => { if (!s.despacho?.[0]) setSel({ tipo: 'emergencia', id: s.id, prioridad: s.prioridad }); }} onDoubleClick={() => verDetalle(s.id)} title="Clic: asignar · Doble clic: ver toda la info" style={{ ...box, borderLeft: `3px solid ${PRIO_HEX[pr] ?? '#E24B4A'}`, borderRadius: '0 10px 10px 0', padding: '9px 10px', marginBottom: '8px', cursor: 'pointer', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>
+                <div key={s.id} onClick={() => { if (!soloLectura && !s.despacho?.[0]) setSel({ tipo: 'emergencia', id: s.id, prioridad: s.prioridad }); }} onDoubleClick={() => verDetalle(s.id)} title={soloLectura ? 'Doble clic: ver toda la info' : 'Clic: asignar · Doble clic: ver toda la info'} style={{ ...box, borderLeft: `3px solid ${PRIO_HEX[pr] ?? '#E24B4A'}`, borderRadius: '0 10px 10px 0', padding: '9px 10px', marginBottom: '8px', cursor: 'pointer', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '12px', fontWeight: 600, color: '#0a2540' }}>#{s.id}{mot?.codigo_radial ? ` · ${mot.codigo_radial}` : ''}</span>
                     {est && <span style={badge(ch.bg, ch.tx)}>{estLabel(est)}</span>}
@@ -283,7 +292,9 @@ export default function DespachoPage() {
                   {asignado && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '5px' }}>
                       <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 500 }}>🚑 {asignado}</span>
-                      {puedeReasignar(s)
+                      {soloLectura
+                        ? null
+                        : puedeReasignar(s)
                         ? <button onClick={(e) => { e.stopPropagation(); setSel({ tipo: 'emergencia', id: s.id, prioridad: s.prioridad, despachoId: s.despacho[0].id }); }} style={{ fontSize: '10px', padding: '2px 7px' }}>Reasignar</button>
                         : <span style={{ fontSize: '10px', color: '#9ca3af' }}>en el lugar · fijo</span>}
                     </div>
@@ -316,9 +327,9 @@ export default function DespachoPage() {
                       {asignado
                         ? <>
                             <span style={{ fontSize: '11px', color: '#1d4ed8', fontWeight: 500 }}>🚑 {asignado}</span>
-                            {puedeReasignar(s) && <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE', despachoId: s.despacho[0].id })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Reasignar</button>}
+                            {!soloLectura && puedeReasignar(s) && <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE', despachoId: s.despacho[0].id })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Reasignar</button>}
                           </>
-                        : <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE' })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Asignar</button>}
+                        : (!soloLectura && <button onClick={() => setSel({ tipo: 'traslado', id: s.id, prioridad: 'VERDE' })} style={{ fontSize: '11px', padding: '4px 9px', outline: sel?.id === s.id ? '2px solid #1d4ed8' : 'none' }}>Asignar</button>)}
                     </div>
                     {s.despacho?.[0] && controlesEstado(s.despacho[0])}
                   </div>

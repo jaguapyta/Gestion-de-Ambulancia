@@ -3,6 +3,7 @@
 import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import ModalReciboCombustible from '../../../components/ModalReciboCombustible';
+import { esSoloLectura } from '@/lib/permisos';
 
 interface Orden {
   id: number;
@@ -64,6 +65,7 @@ export default function OrdenesPage() {
   const [cargandoGuardia, setCargandoGuardia] = useState(false);
   const [reciboOrden, setReciboOrden] = useState<Orden | null>(null);
   const [jefeTransporte, setJefeTransporte] = useState('Jefe de Transporte');
+  const [soloLectura, setSoloLectura] = useState(false);
 
   const [moviles, setMoviles] = useState<any[]>([]);
   const [conductores, setConductores] = useState<any[]>([]);
@@ -93,6 +95,7 @@ export default function OrdenesPage() {
   };
 
   useEffect(() => {
+    try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {}
     cargarOrdenes();
     fetch(`${API_URL}/api/ambulancias`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json())
@@ -366,9 +369,11 @@ export default function OrdenesPage() {
           <h1 style={{ fontSize: '20px', fontWeight: '500', color: '#0a2540', margin: 0 }}>Órdenes de trabajo</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Gestión de órdenes de trabajo de transporte</p>
         </div>
-        <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-          + Nueva orden
-        </button>
+        {!soloLectura && (
+          <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+            + Nueva orden
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
@@ -422,8 +427,10 @@ export default function OrdenesPage() {
                   <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' as const }}>
                     <button onClick={() => imprimirOrdenTrabajo(o)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#374151' }}>🖨️ Orden</button>
                     <button onClick={() => imprimirAnexoIII(o)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#374151' }}>🖨️ Anexo III</button>
-                    <button onClick={() => setReciboOrden(o)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#0a2540' }}>🧾 Recibo</button>
-                    {o.estado === 'ACTIVA' && (
+                    {!soloLectura && (
+                      <button onClick={() => setReciboOrden(o)} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#0a2540' }}>🧾 Recibo</button>
+                    )}
+                    {!soloLectura && o.estado === 'ACTIVA' && (
                       <button onClick={() => { setOrdenSeleccionada(o); setModalCerrarAbierto(true); }} style={{ background: 'transparent', border: '0.5px solid #fecaca', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', color: '#dc2626' }}>Cerrar</button>
                     )}
                   </div>

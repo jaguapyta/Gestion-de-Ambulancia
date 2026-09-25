@@ -8,6 +8,7 @@ import ModalTraslado from '../../../components/ModalTraslado';
 import ModalDialisis from '../../../components/ModalDialisis';
 import ModalEmergencia from '../../../components/ModalEmergencia';
 import IncidentesParecidos from '../../../components/IncidentesParecidos';
+import { esSoloLectura } from '@/lib/permisos';
 
 
 interface Cat { id: number; nombre?: string; descripcion?: string; codigo?: string; }
@@ -100,6 +101,8 @@ export default function RecepcionPage() {
       .finally(() => setCargando(false));
   };
 
+  const [soloLectura, setSoloLectura] = useState(false);
+  useEffect(() => { try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {} }, []);
   useEffect(() => { cargarCatalogos(); }, []);
   useEffect(() => { const t = setTimeout(cargar, 250); return () => clearTimeout(t); }, [filtroEstado, filtroTipo, busqueda]);
 
@@ -133,10 +136,12 @@ export default function RecepcionPage() {
           <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Recepción de solicitudes</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Centro de Regulación · ingreso y seguimiento de pedidos</p>
         </div>
-        <button onClick={() => { setCallTel(''); setCallNombre(''); setModalTipo(true); }}
-          style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-          + Nueva solicitud
-        </button>
+        {!soloLectura && (
+          <button onClick={() => { setCallTel(''); setCallNombre(''); setModalTipo(true); }}
+            style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+            + Nueva solicitud
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '20px' }}>

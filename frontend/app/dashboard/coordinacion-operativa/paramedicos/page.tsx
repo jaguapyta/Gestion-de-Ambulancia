@@ -7,6 +7,7 @@ import ModalEstadosTemporales from '../../../components/ModalEstadosTemporales';
 import ModalResetearPassword from '../../../components/ModalResetearPassword';
 import ModalDiasGuardia from '../../../components/ModalDiasGuardia';
 import ModalEditarFuncionario from '../../../components/ModalEditarFuncionario';
+import { esSoloLectura } from '@/lib/permisos';
 
 interface Contacto {
   id: number;
@@ -125,7 +126,11 @@ export default function ParamedicosPage() {
       .finally(() => setCargando(false));
   };
 
-  useEffect(() => { cargarParamedicos(); }, []);
+  const [soloLectura, setSoloLectura] = useState(false);
+  useEffect(() => {
+    try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {}
+    cargarParamedicos();
+  }, []);
 
   const getNombre = (p: Paramedico) =>
     `${p.usuario.persona.primer_nombre} ${p.usuario.persona.segundo_nombre ?? ''} ${p.usuario.persona.primer_apellido} ${p.usuario.persona.segundo_apellido ?? ''}`.trim();
@@ -360,14 +365,16 @@ export default function ParamedicosPage() {
           <h1 style={{ fontSize: '20px', fontWeight: '500', color: '#0a2540', margin: 0 }}>Paramédicos</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Gestión de paramédicos habilitados del SEME</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => setModalImportAbierto(true)} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-            📥 Importar Excel
-          </button>
-          <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-            + Nuevo paramédico
-          </button>
-        </div>
+        {!soloLectura && (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => setModalImportAbierto(true)} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+              📥 Importar Excel
+            </button>
+            <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+              + Nuevo paramédico
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
@@ -421,10 +428,12 @@ export default function ParamedicosPage() {
                           {DIAS[h.dia_semana - 1]}
                         </span>
                       ))}
-                      <button onClick={() => { setParamedicoSeleccionado(p); setModalDiasAbierto(true); }}
-                        style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
-                        {p.usuario.horario_guardia.length === 0 ? '+ Asignar guardias' : 'Editar'}
-                      </button>
+                      {!soloLectura && (
+                        <button onClick={() => { setParamedicoSeleccionado(p); setModalDiasAbierto(true); }}
+                          style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
+                          {p.usuario.horario_guardia.length === 0 ? '+ Asignar guardias' : 'Editar'}
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
@@ -434,10 +443,12 @@ export default function ParamedicosPage() {
                           <span style={{ fontWeight: '500', color: '#0a2540' }}>{c.tipo_contacto.nombre}:</span> {c.valor}
                         </div>
                       ))}
-                      <button onClick={() => { setParamedicoSeleccionado(p); setModalContactoAbierto(true); }}
-                        style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', textAlign: 'left', padding: 0, marginTop: '2px' }}>
-                        + Agregar contacto
-                      </button>
+                      {!soloLectura && (
+                        <button onClick={() => { setParamedicoSeleccionado(p); setModalContactoAbierto(true); }}
+                          style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', textAlign: 'left', padding: 0, marginTop: '2px' }}>
+                          + Agregar contacto
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
@@ -446,6 +457,9 @@ export default function ParamedicosPage() {
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
+                    {soloLectura ? (
+                      <span style={{ fontSize: '12px', color: '#9ca3af' }}>—</span>
+                    ) : (
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button onClick={() => { setParamedicoSeleccionado(p); setModalEditarAbierto(true); }}
                         style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>
@@ -464,6 +478,7 @@ export default function ParamedicosPage() {
                         {p.activo ? 'Dar de baja' : 'Dar de alta'}
                       </button>
                     </div>
+                    )}
                   </td>
                 </tr>
               );

@@ -7,6 +7,7 @@ import ModalEstadosTemporales from '../../../../components/ModalEstadosTemporale
 import ModalResetearPassword from '../../../../components/ModalResetearPassword';
 import ModalEditarFuncionario from '../../../../components/ModalEditarFuncionario';
 import ModalTurnosMedico from '../../../../components/ModalTurnosMedico';
+import { esSoloLectura } from '@/lib/permisos';
 
 interface Contacto { id: number; valor: string; principal: boolean; tipo_contacto: { id: number; nombre: string }; }
 interface TurnoReg { id: number; dia_semana: number; turno: string; vinculo: number | null; }
@@ -74,7 +75,11 @@ export default function MedicosPage() {
       .catch(err => console.error(err))
       .finally(() => setCargando(false));
   };
-  useEffect(() => { cargar(); }, []);
+  const [soloLectura, setSoloLectura] = useState(false);
+  useEffect(() => {
+    try { setSoloLectura(esSoloLectura(JSON.parse(localStorage.getItem('usuario') || '{}').rol)); } catch {}
+    cargar();
+  }, []);
 
   const getNombre = (m: Medico) =>
     `${m.usuario.persona.primer_nombre} ${m.usuario.persona.segundo_nombre ?? ''} ${m.usuario.persona.primer_apellido} ${m.usuario.persona.segundo_apellido ?? ''}`.trim();
@@ -252,14 +257,16 @@ export default function MedicosPage() {
           <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Médicos reguladores</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Recursos Humanos del Centro de Regulación · turnos de 12h</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => setModalImportAbierto(true)} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-            📥 Importar Excel
-          </button>
-          <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-            + Nuevo médico
-          </button>
-        </div>
+        {!soloLectura && (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={() => setModalImportAbierto(true)} style={{ background: 'white', color: '#0a2540', border: '0.5px solid #e5e7eb', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+              📥 Importar Excel
+            </button>
+            <button onClick={() => setModalAbierto(true)} style={{ background: '#0a2540', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+              + Nuevo médico
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
@@ -309,10 +316,12 @@ export default function MedicosPage() {
                       {m.usuario.turno_regulacion.map(t => (
                         <span key={t.id} style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 500 }}>{chipTurno(t)}</span>
                       ))}
-                      <button onClick={() => { setSeleccionado(m); setModalTurnosAbierto(true); }}
-                        style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
-                        {m.usuario.turno_regulacion.length === 0 ? '+ Asignar turnos' : 'Editar'}
-                      </button>
+                      {!soloLectura && (
+                        <button onClick={() => { setSeleccionado(m); setModalTurnosAbierto(true); }}
+                          style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
+                          {m.usuario.turno_regulacion.length === 0 ? '+ Asignar turnos' : 'Editar'}
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
@@ -322,10 +331,12 @@ export default function MedicosPage() {
                           <span style={{ fontWeight: 500, color: '#0a2540' }}>{c.tipo_contacto.nombre}:</span> {c.valor}
                         </div>
                       ))}
-                      <button onClick={() => { setSeleccionado(m); setModalContactoAbierto(true); }}
-                        style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', textAlign: 'left', padding: 0, marginTop: '2px' }}>
-                        + Agregar contacto
-                      </button>
+                      {!soloLectura && (
+                        <button onClick={() => { setSeleccionado(m); setModalContactoAbierto(true); }}
+                          style={{ background: 'transparent', border: 'none', color: '#1d4ed8', fontSize: '11px', cursor: 'pointer', textAlign: 'left', padding: 0, marginTop: '2px' }}>
+                          + Agregar contacto
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
@@ -334,6 +345,9 @@ export default function MedicosPage() {
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px' }}>
+                    {soloLectura ? (
+                      <span style={{ fontSize: '12px', color: '#9ca3af' }}>—</span>
+                    ) : (
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button onClick={() => { setSeleccionado(m); setModalEditarAbierto(true); }} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>Editar</button>
                       <button onClick={() => { setSeleccionado(m); setModalEstadosAbierto(true); }} style={{ background: 'transparent', border: '0.5px solid #e5e7eb', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#0a2540', whiteSpace: 'nowrap' }}>Estados</button>
@@ -342,6 +356,7 @@ export default function MedicosPage() {
                         {m.activo ? 'Dar de baja' : 'Dar de alta'}
                       </button>
                     </div>
+                    )}
                   </td>
                 </tr>
               );

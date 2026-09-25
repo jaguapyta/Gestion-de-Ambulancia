@@ -3,6 +3,7 @@
 import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { esSoloLectura } from '@/lib/permisos';
 
 interface Tripulante {
   id: number;
@@ -64,6 +65,7 @@ export default function GuardiaDetallePage() {
   const [movilSeleccionado, setMovilSeleccionado] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [usuarioRol, setUsuarioRol] = useState('');
   const [confirmandoEliminar, setConfirmandoEliminar] = useState<number | null>(null);
   const [confirmandoEliminarMovil, setConfirmandoEliminarMovil] = useState<number | null>(null);
   const [errorModal, setErrorModal] = useState('');
@@ -109,6 +111,7 @@ export default function GuardiaDetallePage() {
   };
 
   useEffect(() => {
+    try { setUsuarioRol(JSON.parse(localStorage.getItem('usuario') || '{}').rol ?? ''); } catch {}
     cargarGuardia();
     fetch(`${API_URL}/api/ambulancias`, { headers: { Authorization: `Bearer ${token()}` } })
       .then(r => r.json()).then(data => { if (Array.isArray(data)) setMoviles(data.filter((m: any) => m.activo)); });
@@ -231,7 +234,7 @@ export default function GuardiaDetallePage() {
   const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: '7px', border: '0.5px solid #e5e7eb', fontSize: '13px', boxSizing: 'border-box' as const };
   const labelStyle = { fontSize: '12px', color: '#6b7280', display: 'block' as const, marginBottom: '6px' };
 
-  const puedeEditar = guardia?.estado === 'PLANIFICADO' || guardia?.estado === 'ACTIVO';
+  const puedeEditar = (guardia?.estado === 'PLANIFICADO' || guardia?.estado === 'ACTIVO') && !esSoloLectura(usuarioRol);
 
   if (cargando) return <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Cargando guardia...</div>;
   if (!guardia) return <div style={{ padding: '40px', textAlign: 'center', color: '#dc2626' }}>Guardia no encontrada</div>;

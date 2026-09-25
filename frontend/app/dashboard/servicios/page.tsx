@@ -4,6 +4,7 @@ import { API_URL } from '@/app/lib/api';
 import { useEffect, useState } from 'react';
 import ProtectedRoute from '../../components/ProtectedRoute';
 import FichaPrehospitalaria from '../../components/FichaPrehospitalaria';
+import { esSoloLectura } from '@/lib/permisos';
 
 const EST: Record<number, { l: string; c: string; bg: string }> = {
   1: { l: 'Asignado / en camino', c: '#1d4ed8', bg: '#eff6ff' },
@@ -60,15 +61,15 @@ export default function ServiciosPage() {
     const r = await fetch(`${API_URL}/api/servicios/${id}`, { headers: headers() });
     if (!r.ok) { setMsg('No se pudo abrir el servicio'); return; }
     let s = await r.json();
-    // Al abrir, si está DESPACHADO (1) pasa automáticamente a RECIBIDO (6)
-    if (s.estado_despacho_id === 1) {
+    // Al abrir, si está DESPACHADO (1) pasa automáticamente a RECIBIDO (6). No aplica a Dirección (solo lectura).
+    if (s.estado_despacho_id === 1 && !esSoloLectura(rol)) {
       const rr = await fetch(`${API_URL}/api/servicios/${id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: 6 }) });
       if (rr.ok) { const r2 = await fetch(`${API_URL}/api/servicios/${id}`, { headers: headers() }); if (r2.ok) s = await r2.json(); cargar(); }
     }
     setKm(''); setCond(''); setSel(s); cargarFichas(s.solicitud?.id);
   };
   const avanzar = async (nuevo: number, extra: any = {}) => {
-    if (!sel) return;
+    if (!sel || esSoloLectura(rol)) return;
     const r = await fetch(`${API_URL}/api/servicios/${sel.id}/estado`, { method: 'PATCH', headers: headers(), body: JSON.stringify({ estado_despacho_id: nuevo, ...extra }) });
     const d = await r.json();
     if (r.ok) { setKm(''); setCond(''); await abrir(sel.id); cargar(); } else setMsg(d.error || 'No se pudo cambiar el estado');
@@ -122,7 +123,7 @@ export default function ServiciosPage() {
   };
 
   return (
-    <ProtectedRoute rolesPermitidos={['ADMINISTRADOR', 'PARAMEDICO', 'CONDUCTOR']}>
+    <ProtectedRoute rolesPermitidos={['ADMINISTRADOR', 'PARAMEDICO', 'CONDUCTOR', 'DIRECCION']}>
       <div>
         <h1 style={{ fontSize: '20px', fontWeight: 500, color: '#0a2540', margin: 0 }}>Mis servicios</h1>
         <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Servicios asignados a tu tripulación. Editable hasta 24 h de la asignación.</p>
