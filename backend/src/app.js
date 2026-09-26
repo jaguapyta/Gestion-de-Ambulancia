@@ -52,5 +52,6 @@ app.use('/api/alertas', require('./routes/alertas.routes'));
 app.use('/api/recibos', require('./routes/recibos.routes'));
 app.use('/api/plantillas', require('./routes/plantillas.routes'));
 app.use('/api/ubicacion', require('./routes/ubicacion.routes'));
+app.use('/api/geo', require('./routes/geo.routes'));
 
 module.exports = app;
